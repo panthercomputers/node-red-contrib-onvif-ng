@@ -1,9 +1,13 @@
 # node-red-contrib-onvif-2026
 
+*** This project is not affiliated with or endorsed by the original author. ***
+
 Node Red nodes for communicating with OnVif compliant IP devices
 
 ** This is a modernized version that looks to make Nodered 4.0 compliant and add modern more secure credentialling that is transportable between Nodered deployments **
+
 ** The orginal project hasn't been updated in six years so this project fork looks to resolve the issues and add features and release to NPM for easier deployment **
+
 ** The entire project will be updated over the next few months inclduing documentation.  Once functionally complete feel free to contribute or make requests and we'll take on the challenge to improve grow, and keep stable **
 
 ## Install
