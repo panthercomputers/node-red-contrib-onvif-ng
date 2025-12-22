@@ -55,7 +55,7 @@
         }
         
         function getSnapshot(uri, newMsg) {
-            require('request').get(uri, {
+            fetch (Node 18+).get(uri, {
               'auth': {
                 'user': node.deviceConfig.credentials.user,
                 'pass': node.deviceConfig.credentials.password,
@@ -334,4 +334,5 @@
     }
     RED.nodes.registerType("onvif-media",OnVifMediaNode);
 }
+
 
