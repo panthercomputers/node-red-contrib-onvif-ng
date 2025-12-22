@@ -54,40 +54,42 @@
             node.deviceConfig.initialize();
         }
         
-        function getSnapshot(uri, newMsg) {
-            fetch (Node 18+).get(uri, {
-              'auth': {
-                'user': node.deviceConfig.credentials.user,
-                'pass': node.deviceConfig.credentials.password,
-                'sendImmediately': false
-              }
-            }).on('response', function(response) {
-                if(response.statusCode === 200) {
-                    // Concatenate all the data chunks, to get a complete image (as a Buffer)
-                    newMsg.payload = response.body;
-                        
-                    newMsg.contentType = response.headers['content-type'];
-                    if(!newMsg.contentType) { 
-                        newMsg.contentType = 'image/jpeg';
-                    }
-                    
-                    // Remember all body chunks and concatenate them into a single buffer when entire image received
-                    var bodyChunks = [];
-                    response.on("data", function (chunk) {
-                        bodyChunks.push(chunk);
-                    });
-                    response.on("end", function () {
-                        newMsg.payload = Buffer.concat(bodyChunks);
-                        node.send(newMsg);
-                    });
-                }
-                else {
-                    console.log(response.statusCode + ' ' + response.statusMessage);
-                }
-            }).on('error', function(err) {
-                console.error(err.message)
-            })
+async function getSnapshot(uri, newMsg) {
+    try {
+        const username = node.deviceConfig.credentials.user;
+        const password = node.deviceConfig.credentials.password;
+
+        const auth = Buffer
+            .from(`${username}:${password}`)
+            .toString('base64');
+
+        const response = await fetch(uri, {
+            headers: {
+                'Authorization': `Basic ${auth}`
+            }
+        });
+
+        if (!response.ok) {
+            node.error(`Snapshot failed: ${response.status} ${response.statusText}`);
+            return;
         }
+
+        const contentType =
+            response.headers.get('content-type') || 'image/jpeg';
+
+        const arrayBuffer = await response.arrayBuffer();
+        const buffer = Buffer.from(arrayBuffer);
+
+        newMsg.payload = buffer;
+        newMsg.contentType = contentType;
+
+        node.send(newMsg);
+    }
+    catch (err) {
+        node.error(`Snapshot fetch error: ${err.message}`);
+    }
+}
+
 
         node.on("input", function(msg) {  
             var newMsg = {};
@@ -334,6 +336,7 @@
     }
     RED.nodes.registerType("onvif-media",OnVifMediaNode);
 }
+
 
 
 
