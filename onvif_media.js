@@ -22,7 +22,7 @@
     var settings = RED.settings;
     const onvif  = require('onvif');
     const url    = require('url');
-    const https  = require('http');
+    const https  = require('https');
     const utils  = require('./utils');
 
     function OnVifMediaNode(config) {
@@ -334,5 +334,6 @@
     }
     RED.nodes.registerType("onvif-media",OnVifMediaNode);
 }
+
 
 
