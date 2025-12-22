@@ -5,338 +5,164 @@
  * Modifications:
  * Copyright 2025 Panther Computers
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+ * Licensed under the Apache License, Version 2.0
  */
 
- module.exports = function(RED) {
-    var settings = RED.settings;
-    const onvif  = require('onvif');
-    const url    = require('url');
-    const https  = require('https');
-    const utils  = require('./utils');
+module.exports = function (RED) {
+    const onvif = require("onvif");
+    const utils = require("./utils");
 
     function OnVifMediaNode(config) {
         RED.nodes.createNode(this, config);
-        this.action  = config.action;
-        this.profileToken = config.profileToken;
-        this.profileName = config.profileName;
-        this.videoEncoderConfigToken = config.videoEncoderConfigToken;
-        this.protocol = config.protocol;
-        this.stream = config.stream;
-        this.snapshotUriMap = new Map();
-        
-        var node = this; 
-        
-        // Retrieve the config node, where the device is configured
+        const node = this;
+
+        node.action = config.action;
+        node.profileToken = config.profileToken;
+        node.profileName = config.profileName;
+        node.protocol = config.protocol;
+        node.stream = config.stream;
+        node.snapshotUriMap = new Map();
+
         node.deviceConfig = RED.nodes.getNode(config.deviceConfig);
-        
+
         if (node.deviceConfig) {
-            node.listener = function(onvifStatus) {
-                utils.setNodeStatus(node, 'media', onvifStatus);
-            }
-            
-            // Start listening for Onvif config nodes status changes
+            node.listener = (status) => {
+                utils.setNodeStatus(node, "media", status);
+            };
             node.deviceConfig.addListener("onvif_status", node.listener);
-            
-            // Show the current Onvif config node status already
-            utils.setNodeStatus(node, 'media', node.deviceConfig.onvifStatus);
-            
+            utils.setNodeStatus(node, "media", node.deviceConfig.onvifStatus);
             node.deviceConfig.initialize();
         }
-        
-async function getSnapshot(uri, newMsg) {
-    try {
-        const username = node.deviceConfig.credentials.user;
-        const password = node.deviceConfig.credentials.password;
 
-        const auth = Buffer
-            .from(`${username}:${password}`)
-            .toString('base64');
+        /**
+         * SAFE snapshot fetch with timeout + abort
+         */
+        async function fetchSnapshot(uri, msg) {
+            const controller = new AbortController();
+            const timeout = setTimeout(() => controller.abort(), 5000);
 
-        const response = await fetch(uri, {
-            headers: {
-                'Authorization': `Basic ${auth}`
+            try {
+                const { user, password } = node.deviceConfig.credentials || {};
+                if (!user || !password) {
+                    node.error("Missing camera credentials");
+                    return;
+                }
+
+                const auth = Buffer
+                    .from(`${user}:${password}`)
+                    .toString("base64");
+
+                const res = await fetch(uri, {
+                    headers: { Authorization: `Basic ${auth}` },
+                    signal: controller.signal
+                });
+
+                if (!res.ok) {
+                    node.error(`Snapshot HTTP ${res.status}`);
+                    return;
+                }
+
+                const buffer = Buffer.from(await res.arrayBuffer());
+                msg.payload = buffer;
+                msg.contentType =
+                    res.headers.get("content-type") || "image/jpeg";
+
+                node.send(msg);
             }
-        });
-
-        if (!response.ok) {
-            node.error(`Snapshot failed: ${response.status} ${response.statusText}`);
-            return;
+            catch (err) {
+                if (err.name !== "AbortError") {
+                    node.error(`Snapshot error: ${err.message}`);
+                }
+            }
+            finally {
+                clearTimeout(timeout);
+            }
         }
 
-        const contentType =
-            response.headers.get('content-type') || 'image/jpeg';
-
-        const arrayBuffer = await response.arrayBuffer();
-        const buffer = Buffer.from(arrayBuffer);
-
-        newMsg.payload = buffer;
-        newMsg.contentType = contentType;
-
-        node.send(newMsg);
-    }
-    catch (err) {
-        node.error(`Snapshot fetch error: ${err.message}`);
-    }
-}
-
-
-        node.on("input", function(msg) {  
-            var newMsg = {};
-            
-            var action = node.action || msg.action;
-
+        node.on("input", function (msg) {
+            const action = node.action || msg.action;
             if (!action) {
-                // When no action specified in the node, it should be specified in the msg.action
-                node.error("No action specified (in node or msg)");
+                node.error("No action specified");
                 return;
             }
-            
-            // Don't perform these checks when e.g. the device is currently disconnected (because then e.g. no capabilities are loaded yet)
-            if (action !== "reconnect") {
-                if (!node.deviceConfig || node.deviceConfig.onvifStatus != "connected") {
-                    node.error("This node is not connected to a device");
-                    return;
-                }
 
-                if (!utils.hasService(node.deviceConfig.cam, 'media')) {
-                    node.error("The device has no support for a media service");
+            if (action !== "reconnect") {
+                if (!node.deviceConfig || node.deviceConfig.onvifStatus !== "connected") {
+                    node.error("Not connected to device");
+                    return;
+                }
+                if (!utils.hasService(node.deviceConfig.cam, "media")) {
+                    node.error("Media service not supported");
                     return;
                 }
             }
-       
-            var protocol = node.protocol || msg.protocol;
-            var stream = node.stream || msg.stream;
-            var profileToken = node.profileToken || msg.profileToken;
-            var profileName = node.profileName || msg.profileName;
-            var videoEncoderConfigToken = node.videoEncoderConfigToken || msg.videoEncoderConfigToken;
-            
-            // TODO check this only for actions where profileToken is needed
-            // TODO when device disconnected, this gives "Cannot read property '$' of undefined" due to missing videosources...
-            /*if (!profileToken) {
-                if (!node.deviceConfig.cam.getActiveSources()) {
-                    console.warn('No default video source available');
-                    return;
-                }
-            }*/
-            
-            // To make things easier for a user, we will let the user specify profile names.
-            // The corresponding profile token (which is required in Onvif to work with profiles) will be searched here...
-            if (!profileToken && profileName) {
-                profileToken = node.deviceConfig.getProfileTokenByName(profileName);
-            }
-            
-            newMsg.xaddr = this.deviceConfig.xaddress;
-            newMsg.action = action;
-   
+
+            const profileToken =
+                node.profileToken ||
+                msg.profileToken ||
+                (node.profileName
+                    ? node.deviceConfig.getProfileTokenByName(node.profileName)
+                    : undefined);
+
+            const newMsg = {
+                action,
+                xaddr: node.deviceConfig?.xaddress
+            };
+
             try {
                 switch (action) {
-                     case "getStreamUri":
-                        // All these 3 fields are optional.  If not specified, the device will use the defaults.
-                        var options = {
-                            'stream': stream,
-                            'profileToken': profileToken,
-                            'protocol': protocol
-                        };
+                    case "getSnapshot": {
+                        const cached = node.snapshotUriMap.get(profileToken);
+                        if (cached) {
+                            fetchSnapshot(cached, newMsg);
+                            return;
+                        }
 
-                        node.deviceConfig.cam.getStreamUri(options, function(err, stream, xml) {
-                            utils.handleResult(node, err, stream, xml, newMsg);
-                        });
-                        break; 
-                    case "getSnapshotUri":
-                        // The profileToken is optional.  When not specified, the device will use the default profile token.
-                        var options = {
-                            'profileToken': profileToken
-                        };
-
-                        node.deviceConfig.cam.getSnapshotUri(options, function(err, stream, xml) {
-                            utils.handleResult(node, err, stream, xml, newMsg);
-                        });
-                        break; 
-                    case "getVideoEncoderConfiguration": 
-                        // If the videoEncoderConfigToken doesn't exist, the first element from the videoEncoderConfigurations array will be returned
-                        node.deviceConfig.cam.getVideoEncoderConfiguration(videoEncoderConfigToken, function(err, stream, xml) {
-                            utils.handleResult(node, err, stream, xml, newMsg);
-                        });
-                        break;                       
-                     case "getVideoEncoderConfigurations": 
-                        node.deviceConfig.cam.getVideoEncoderConfigurations(function(err, stream, xml) {
-                            utils.handleResult(node, err, stream, xml, newMsg);
-                        });
-                        break;    
-                     case "getVideoEncoderConfigurationOptions": 
-                        // If the videoEncoderConfigToken doesn't exist, the first element from the videoEncoderConfigurations array will be used
-                        node.deviceConfig.cam.getVideoEncoderConfigurationOptions(videoEncoderConfigToken, function(err, stream, xml) {
-                            utils.handleResult(node, err, stream, xml, newMsg);
-                        });
-                        break;                        
-                     case "getProfiles": 
-                        node.deviceConfig.cam.getProfiles(function(err, stream, xml) {
-                            utils.handleResult(node, err, stream, xml, newMsg);
-                        });
-                        break;                        
-                     case "getVideoSources": 
-                        node.deviceConfig.cam.getVideoSources(function(err, stream, xml) {
-                            utils.handleResult(node, err, stream, xml, newMsg);
-                        });
-                        break;                       
-                     case "getVideoSourceConfigurations": 
-                        node.deviceConfig.cam.getVideoSourceConfigurations(function(err, stream, xml) {
-                            utils.handleResult(node, err, stream, xml, newMsg);
-                        });
-                        break;                   
-                     case "getAudioSources": 
-                        node.deviceConfig.cam.getAudioSources(function(err, stream, xml) {
-                            utils.handleResult(node, err, stream, xml, newMsg);
-                        });
-                        break;                
-                     case "getAudioSourceConfigurations": 
-                        node.deviceConfig.cam.getAudioSourceConfigurations(function(err, stream, xml) {
-                            utils.handleResult(node, err, stream, xml, newMsg);
-                        });
-                        break; 
-                     case "getAudioEncoderConfigurations": 
-                        node.deviceConfig.cam.getAudioEncoderConfigurations(function(err, stream, xml) {
-                            utils.handleResult(node, err, stream, xml, newMsg);
-                        });
-                        break;    
-                     case "getAudioOutputs": 
-                        node.deviceConfig.cam.getAudioOutputs(function(err, stream, xml) {
-                            utils.handleResult(node, err, stream, xml, newMsg);
-                        });
-                        break;    
-                     case "getAudioOutputConfigurations":
-                        node.deviceConfig.cam.getAudioOutputConfigurations(function(err, stream, xml) {
-                            utils.handleResult(node, err, stream, xml, newMsg);
-                        });
-                        break;   
-                    case "getOSDs": 
-                        // If the videoEncoderConfigToken doesn't exist, all available OSD's will be requested
-                        node.deviceConfig.cam.getOSDs(videoEncoderConfigToken, function(err, stream, xml) {
-                            // Onvif OSD implementation is optional and most manufactures did not implement it.
-                            // This means we will arrive here often ... 
-                            // Most camera's will offer another REST interface to check and configure OSD texts, but not based on OnVif.
-                            utils.handleResult(node, err, stream, xml, newMsg);
-                        });
-                        break; 
-                    case "getSnapshot":
-                        var snapshotUri = node.snapshotUriMap.get(profileToken);
-
-                        // Get the uri once (and cache it), when it hasn't been retrieved yet
-                        if (!snapshotUri) {
-                            // When no token is specified, the camera will use the default token
-                            var options = {
-                                'profileToken': profileToken
-                            };
-
-                            node.deviceConfig.cam.getSnapshotUri(options, function(err, stream, xml) {
-                                utils.handleResult(node, err, stream, xml, null);
-                                
-                                if (!err) {
-                                    // Cache the URL for the next time
-                                    node.snapshotUriMap.set(profileToken, stream.uri);
-                                    getSnapshot(stream.uri, newMsg);
+                        node.deviceConfig.cam.getSnapshotUri(
+                            { profileToken },
+                            (err, stream) => {
+                                if (err || !stream?.uri) {
+                                    node.error(`Snapshot URI failed: ${err?.message || "unknown"}`);
+                                    return;
                                 }
-                            });
-                        }
-                        else {
-                            getSnapshot(snapshotUri, newMsg);
-                        }
-                         
-                        break; 
-                    case "createProfile":
-                        // The profile name is optional
-                        var options = {
-                            'name': profileName,
-                            'profileToken': profileToken // TODO This is not being used (the device generates a new token) ...
-                        };
-                        
-                        // Create an empty new deletable media profile
-                        node.deviceConfig.cam.createProfile(options, function(err, stream, xml) {
-                            utils.handleResult(node, err, stream, xml, newMsg);
-                        });
-                        
+                                node.snapshotUriMap.set(profileToken, stream.uri);
+                                fetchSnapshot(stream.uri, newMsg);
+                            }
+                        );
                         break;
-                    case "deleteProfile":
-                        node.deviceConfig.cam.deleteProfile(profileToken, function(err, stream, xml) {
-                            utils.handleResult(node, err, stream, xml, newMsg);
-                        });
+                    }
 
+                    case "getStreamUri":
+                        node.deviceConfig.cam.getStreamUri(
+                            {
+                                stream: node.stream || msg.stream,
+                                protocol: node.protocol || msg.protocol,
+                                profileToken
+                            },
+                            (err, stream, xml) =>
+                                utils.handleResult(node, err, stream, xml, newMsg)
+                        );
                         break;
-                        /* TODO
-                    case "setVideoEncoderConfiguration":
-                        var options = {
-                            'token': node.videoEncoderConfigToken,
-                            'name': node.videoEncoderConfigName,
-                            //'useCount': ???,
-                            'encoding': node.videoEncoderConfigEncoding, //JPEG | H264 | MPEG4
-                            'resolution': {
-                                'width': node.videoEncoderConfigWidth,
-                                'height': node.videoEncoderConfigHeight,
-                            },
-                            //'quality': ?????,
-                            'rateControl': {
-                                'frameRateLimit': node.videoEncoderConfigFrameRateLimit,
-                                'encodingInterval': node.videoEncoderConfigEncodingInterval,
-                                'bitrateLimit': node.videoEncoderConfigBitrateLimit
-                            },
-                            'MPEG4': {
-                                'govLength': node.videoEncoderConfigMpeg4GovLength,
-                                'profile': node.videoEncoderConfigMpeg4Profile // SP | ASP
-                            },
-                            'H264': {
-                                'govLength': node.videoEncoderConfigH264GovLength,
-                                'profile': node.videoEncoderConfigH264Profile // Baseline | Main | Extended | High
-                            },   
-                            'multicast': {
-                                'address': node.videoEncoderConfigMulticastAddress,
-                                'type': node.videoEncoderConfigMulticastType, // IPv4 | IPv6
-                                'IPv4Address': node.videoEncoderConfigMulticastIpv4Address,
-                                'IPv6Address': node.videoEncoderConfigMulticastIpv6Address,
-                                'port': node.videoEncoderConfigMulticastPort,
-                                'TTL': node.videoEncoderConfigMulticastTtl,  
-                                'autoStart': node.videoEncoderConfigMulticastAutoStart,                              
-                            },  
-                            'sessionTimeout': node.videoEncoderConfigName
-                        };
-                        
-                        node.deviceConfig.cam.setVideoEncoderConfiguration(options, function(err, stream, xml) {
-                            utils.handleResult(node, err, stream, xml, newMsg);
-                        });;
 
-                        break; */
                     case "reconnect":
                         node.deviceConfig.cam.connect();
                         break;
+
                     default:
-                        //node.status({fill:"red",shape:"dot",text: "unsupported action"});
-                        node.error("Action " + action + " is not supported");
+                        node.error(`Unsupported action: ${action}`);
                 }
             }
-            catch (exc) {
-                node.error("Action " + action + " failed: " + exc);
+            catch (err) {
+                node.error(`Action failed: ${err.message}`);
             }
         });
-        
-        node.on("close",function() { 
+
+        node.on("close", () => {
             if (node.listener) {
                 node.deviceConfig.removeListener("onvif_status", node.listener);
             }
         });
     }
-    RED.nodes.registerType("onvif-media",OnVifMediaNode);
-}
 
-
-
-
+    RED.nodes.registerType("onvif-media", OnVifMediaNode);
+};
