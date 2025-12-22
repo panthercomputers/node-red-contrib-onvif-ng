@@ -1,41 +1,21 @@
-# node-red-contrib-onvif-nodes
+# node-red-contrib-onvif-2026
+
 Node Red nodes for communicating with OnVif compliant IP devices
 
-**THIS IS AN EXPERIMENTAL NODE-RED CONTRIBUTION  !!!**
-
-*Update 28-11-2020: I get frequently the question why I haven't published these nodes on NPM yet.*
-
-*Well the answer is very simple: a lack of free time...*
-
-*Our friend @SuperNinja73 has been so kind to perform a large series of tests (see [test results](https://discourse.nodered.org/t/node-red-contrib-onvif-nodes-beta-test/33722/2?u=bartbutenaers)).*
-
-*Based on these test result, I concluded that the comera profile configuration via these nodes is not user friendly.*
-
-*But I don't have the time to develop and maintain an entire Onvif device manager inside Node-RED.*
-
-*To solve this I would like to generate automatically a user interface based on the [onvif.xsd](https://www.onvif.org/onvif/ver10/schema/onvif.xsd) file.*
-
-*I have compared some libraries, but at the end I [agreed](https://discourse.nodered.org/t/editor-based-on-xsd/33965/11?u=bartbutenaers) with Nick to implement this functionality in the Node-RED JSON editor.*
-
-*Because then it can be reused by other node developers.*
-
-*However it seems the JSON schema specification is rather large, so it is a hell of a job to implement this in my very limited time.*
-
-*That is why it is all taking so long ...*
-
+** This is a modernized version that looks to make Nodered 4.0 compliant and add modern more secure credentialling that is transportable between Nodered deployments **
+** The orginal project hasn't been updated in six years so this project fork looks to resolve the issues and add features and release to NPM for easier deployment **
+** The entire project will be updated over the next few months inclduing documentation.  Once functionally complete feel free to contribute or make requests and we'll take on the challenge to improve grow, and keep stable **
 
 ## Install
 Run the following npm command in your Node-RED user directory (typically ~/.node-red), to install the latest beta version of this node:
 ```
-npm install node-red-contrib-onvif-nodes@0.0.1-beta.15
+npm install node-red-contrib-onvif-2026
 ```
-See the [releases](https://github.com/bartbutenaers/node-red-contrib-onvif-nodes/releases) page for an overview of what has changed per release.
+See the [releases](https://github.com/panthercomputers/node-red-contrib-onvif-2026/releases) page for an overview of what has changed per release.
 
 ## Support my Node-RED developments
 
-Please buy my wife a coffee to keep her happy, while I am busy developing Node-RED stuff for you ...
-
-<a href="https://www.buymeacoffee.com/bartbutenaers" target="_blank"><img src="https://www.buymeacoffee.com/assets/img/custom_images/orange_img.png" alt="Buy my wife a coffee" style="height: 41px !important;width: 174px !important;box-shadow: 0px 3px 2px 0px rgba(190, 190, 190, 0.5) !important;-webkit-box-shadow: 0px 3px 2px 0px rgba(190, 190, 190, 0.5) !important;" ></a>
+If you want to support this project and need web or VPS hosting, consider looking at www.panthercomputers.com
 
 ## Onvif basics
 The Open Network Video Interface Forum is an open standard interface to communicate with IP devices on a network.   This standard has become very popular, and therefore lots of manufacturers offer Onvif-compliant IP devices.
