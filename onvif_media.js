@@ -12,6 +12,12 @@ module.exports = function (RED) {
     const onvif = require("onvif");
     const utils = require("./utils");
 
+    // Defensive fetch binding (Node 18+ but safer)
+    const fetchFn = global.fetch || require("node-fetch");
+
+    // Snapshot cache TTL (ms)
+    const SNAPSHOT_URI_TTL = 60 * 1000; // 1 minute
+
     function OnVifMediaNode(config) {
         RED.nodes.createNode(this, config);
         const node = this;
@@ -21,6 +27,8 @@ module.exports = function (RED) {
         node.profileName = config.profileName;
         node.protocol = config.protocol;
         node.stream = config.stream;
+
+        // profileToken => { uri, ts }
         node.snapshotUriMap = new Map();
 
         node.deviceConfig = RED.nodes.getNode(config.deviceConfig);
@@ -42,17 +50,17 @@ module.exports = function (RED) {
             const timeout = setTimeout(() => controller.abort(), 5000);
 
             try {
-                const { user, password } = node.deviceConfig.credentials || {};
-                if (!user || !password) {
+                const creds = node.deviceConfig.credentials || {};
+                if (!creds.user || !creds.password) {
                     node.error("Missing camera credentials");
                     return;
                 }
 
                 const auth = Buffer
-                    .from(`${user}:${password}`)
+                    .from(`${creds.user}:${creds.password}`)
                     .toString("base64");
 
-                const res = await fetch(uri, {
+                const res = await fetchFn(uri, {
                     headers: { Authorization: `Basic ${auth}` },
                     signal: controller.signal
                 });
@@ -62,8 +70,7 @@ module.exports = function (RED) {
                     return;
                 }
 
-                const buffer = Buffer.from(await res.arrayBuffer());
-                msg.payload = buffer;
+                msg.payload = Buffer.from(await res.arrayBuffer());
                 msg.contentType =
                     res.headers.get("content-type") || "image/jpeg";
 
@@ -104,6 +111,11 @@ module.exports = function (RED) {
                     ? node.deviceConfig.getProfileTokenByName(node.profileName)
                     : undefined);
 
+            if (!profileToken && action === "getSnapshot") {
+                node.error("No profile token available for snapshot");
+                return;
+            }
+
             const newMsg = {
                 action,
                 xaddr: node.deviceConfig?.xaddress
@@ -113,8 +125,10 @@ module.exports = function (RED) {
                 switch (action) {
                     case "getSnapshot": {
                         const cached = node.snapshotUriMap.get(profileToken);
-                        if (cached) {
-                            fetchSnapshot(cached, newMsg);
+                        const now = Date.now();
+
+                        if (cached && now - cached.ts < SNAPSHOT_URI_TTL) {
+                            fetchSnapshot(cached.uri, newMsg);
                             return;
                         }
 
@@ -122,10 +136,17 @@ module.exports = function (RED) {
                             { profileToken },
                             (err, stream) => {
                                 if (err || !stream?.uri) {
-                                    node.error(`Snapshot URI failed: ${err?.message || "unknown"}`);
+                                    node.error(
+                                        `Snapshot URI failed: ${err?.message || "unknown"}`
+                                    );
                                     return;
                                 }
-                                node.snapshotUriMap.set(profileToken, stream.uri);
+
+                                node.snapshotUriMap.set(profileToken, {
+                                    uri: stream.uri,
+                                    ts: Date.now()
+                                });
+
                                 fetchSnapshot(stream.uri, newMsg);
                             }
                         );
@@ -145,7 +166,11 @@ module.exports = function (RED) {
                         break;
 
                     case "reconnect":
-                        node.deviceConfig.cam.connect();
+                        try {
+                            node.deviceConfig.cam.connect();
+                        } catch (err) {
+                            node.error(`Reconnect failed: ${err.message}`);
+                        }
                         break;
 
                     default:
@@ -158,7 +183,7 @@ module.exports = function (RED) {
         });
 
         node.on("close", () => {
-            if (node.listener) {
+            if (node.listener && node.deviceConfig) {
                 node.deviceConfig.removeListener("onvif_status", node.listener);
             }
         });
