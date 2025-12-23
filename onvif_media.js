@@ -9,14 +9,8 @@
  */
 
 module.exports = function (RED) {
-    const onvif = require("onvif");
     const utils = require("./utils");
-
-    // Defensive fetch binding (Node 18+ but safer)
-    const fetchFn = global.fetch || require("node-fetch");
-
-    // Snapshot cache TTL (ms)
-    const SNAPSHOT_URI_TTL = 60 * 1000; // 1 minute
+    const { onvifCall } = require("./utils/onvifCall");
 
     function OnVifMediaNode(config) {
         RED.nodes.createNode(this, config);
@@ -28,7 +22,6 @@ module.exports = function (RED) {
         node.protocol = config.protocol;
         node.stream = config.stream;
 
-        // profileToken => { uri, ts }
         node.snapshotUriMap = new Map();
 
         node.deviceConfig = RED.nodes.getNode(config.deviceConfig);
@@ -37,40 +30,40 @@ module.exports = function (RED) {
             node.listener = (status) => {
                 utils.setNodeStatus(node, "media", status);
             };
+
             node.deviceConfig.addListener("onvif_status", node.listener);
             utils.setNodeStatus(node, "media", node.deviceConfig.onvifStatus);
             node.deviceConfig.initialize();
         }
 
         /**
-         * SAFE snapshot fetch with timeout + abort
+         * Secure snapshot fetch (Node 18+ fetch)
          */
         async function fetchSnapshot(uri, msg) {
             const controller = new AbortController();
             const timeout = setTimeout(() => controller.abort(), 5000);
 
             try {
-                const creds = node.deviceConfig.credentials || {};
-                if (!creds.user || !creds.password) {
-                    node.error("Missing camera credentials");
-                    return;
+                const { user, password } = node.deviceConfig.credentials || {};
+                if (!user || !password) {
+                    throw new Error("Missing camera credentials");
                 }
 
                 const auth = Buffer
-                    .from(`${creds.user}:${creds.password}`)
+                    .from(`${user}:${password}`)
                     .toString("base64");
 
-                const res = await fetchFn(uri, {
+                const res = await fetch(uri, {
                     headers: { Authorization: `Basic ${auth}` },
                     signal: controller.signal
                 });
 
                 if (!res.ok) {
-                    node.error(`Snapshot HTTP ${res.status}`);
-                    return;
+                    throw new Error(`Snapshot HTTP ${res.status}`);
                 }
 
-                msg.payload = Buffer.from(await res.arrayBuffer());
+                const buffer = Buffer.from(await res.arrayBuffer());
+                msg.payload = buffer;
                 msg.contentType =
                     res.headers.get("content-type") || "image/jpeg";
 
@@ -86,7 +79,7 @@ module.exports = function (RED) {
             }
         }
 
-        node.on("input", function (msg) {
+        node.on("input", async function (msg) {
             const action = node.action || msg.action;
             if (!action) {
                 node.error("No action specified");
@@ -98,6 +91,7 @@ module.exports = function (RED) {
                     node.error("Not connected to device");
                     return;
                 }
+
                 if (!utils.hasService(node.deviceConfig.cam, "media")) {
                     node.error("Media service not supported");
                     return;
@@ -111,66 +105,61 @@ module.exports = function (RED) {
                     ? node.deviceConfig.getProfileTokenByName(node.profileName)
                     : undefined);
 
-            if (!profileToken && action === "getSnapshot") {
-                node.error("No profile token available for snapshot");
-                return;
-            }
-
-            const newMsg = {
+            const outMsg = {
                 action,
                 xaddr: node.deviceConfig?.xaddress
             };
 
             try {
                 switch (action) {
-                    case "getSnapshot": {
-                        const cached = node.snapshotUriMap.get(profileToken);
-                        const now = Date.now();
 
-                        if (cached && now - cached.ts < SNAPSHOT_URI_TTL) {
-                            fetchSnapshot(cached.uri, newMsg);
+                    case "getSnapshot": {
+                        const cachedUri = node.snapshotUriMap.get(profileToken);
+                        if (cachedUri) {
+                            await fetchSnapshot(cachedUri, outMsg);
                             return;
                         }
 
-                        node.deviceConfig.cam.getSnapshotUri(
-                            { profileToken },
-                            (err, stream) => {
-                                if (err || !stream?.uri) {
-                                    node.error(
-                                        `Snapshot URI failed: ${err?.message || "unknown"}`
-                                    );
-                                    return;
-                                }
+                        const { data } = await onvifCall({
+                            node,
+                            cam: node.deviceConfig.cam,
+                            method: "getSnapshotUri",
+                            args: { profileToken }
+                        });
 
-                                node.snapshotUriMap.set(profileToken, {
-                                    uri: stream.uri,
-                                    ts: Date.now()
-                                });
+                        if (!data?.uri) {
+                            throw new Error("No snapshot URI returned");
+                        }
 
-                                fetchSnapshot(stream.uri, newMsg);
-                            }
-                        );
+                        node.snapshotUriMap.set(profileToken, data.uri);
+                        await fetchSnapshot(data.uri, outMsg);
                         break;
                     }
 
-                    case "getStreamUri":
-                        node.deviceConfig.cam.getStreamUri(
-                            {
+                    case "getStreamUri": {
+                        const { data, xml } = await onvifCall({
+                            node,
+                            cam: node.deviceConfig.cam,
+                            method: "getStreamUri",
+                            args: {
                                 stream: node.stream || msg.stream,
                                 protocol: node.protocol || msg.protocol,
                                 profileToken
-                            },
-                            (err, stream, xml) =>
-                                utils.handleResult(node, err, stream, xml, newMsg)
-                        );
+                            }
+                        });
+
+                        utils.handleResult(node, null, data, xml, outMsg);
                         break;
+                    }
 
                     case "reconnect":
-                        try {
-                            node.deviceConfig.cam.connect();
-                        } catch (err) {
-                            node.error(`Reconnect failed: ${err.message}`);
-                        }
+                        await onvifCall({
+                            node,
+                            cam: node.deviceConfig.cam,
+                            method: "connect",
+                            timeout: 5000,
+                            retries: 0
+                        });
                         break;
 
                     default:
@@ -178,12 +167,12 @@ module.exports = function (RED) {
                 }
             }
             catch (err) {
-                node.error(`Action failed: ${err.message}`);
+                utils.handleResult(node, err, null, null, outMsg);
             }
         });
 
         node.on("close", () => {
-            if (node.listener && node.deviceConfig) {
+            if (node.listener) {
                 node.deviceConfig.removeListener("onvif_status", node.listener);
             }
         });
