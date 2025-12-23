@@ -5,286 +5,218 @@
  * Modifications:
  * Copyright 2025 Panther Computers
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+ * Licensed under the Apache License, Version 2.0
  */
 
- module.exports = function(RED) {
-    var settings = RED.settings;
-    const onvif = require('onvif');
-    const utils = require('./utils');
-    
+module.exports = function (RED) {
+    const utils = require("./utils");
+
     function OnVifEventsNode(config) {
         RED.nodes.createNode(this, config);
-        this.action = config.action;
+        const node = this;
 
-        var node = this;
-        
-        // Retrieve the config node, where the device is configured
+        node.action = config.action;
+        node.eventListener = null;
+
         node.deviceConfig = RED.nodes.getNode(config.deviceConfig);
-        
+
         if (node.deviceConfig) {
-            node.listener = function(onvifStatus) {
+            node.listener = (onvifStatus) => {
+                // Stop event listener if device disconnects
                 if (onvifStatus !== "connected" && node.eventListener) {
-                    // When the device isn't connected anymore, stop listening to events from the camera
-                    node.deviceConfig.cam.removeListener('events', node.eventListener);
+                    try {
+                        node.deviceConfig.cam.removeListener("event", node.eventListener);
+                    } catch (_) {}
                     node.eventListener = null;
                 }
-                
-                // When we are listening, show the status "listening" instead of connected
-                if (onvifStatus === "connected") {
-                    if (node.eventListener) {
-                        onvifStatus = "listening"
-                    }
-                }
-                
-                utils.setNodeStatus(node, 'event', onvifStatus);
-            }
-            
-            // Start listening for Onvif config nodes status changes
+
+                // Override status if actively listening
+                const status =
+                    onvifStatus === "connected" && node.eventListener
+                        ? "listening"
+                        : onvifStatus;
+
+                utils.setNodeStatus(node, "event", status);
+            };
+
             node.deviceConfig.addListener("onvif_status", node.listener);
-            
-            // Show the current Onvif config node status already
-            utils.setNodeStatus(node, 'event', node.deviceConfig.onvifStatus);
-            
+            utils.setNodeStatus(node, "event", node.deviceConfig.onvifStatus);
             node.deviceConfig.initialize();
         }
-               
-        node.on("input", function(msg) {  
-            var newMsg = {};
-            
-            // Note: the node's config screen has no 'action' input field yet ...
-            var action = node.action || msg.action;
-            
-            if (!action) {
-                // When no action specified in the node, it should be specified in the msg.action
-                node.error("No action specified (in node or msg)");
-                return;
-            }
-            
-            // Don't perform these checks when e.g. the device is currently disconnected (because then e.g. no capabilities are loaded yet)
-            if (action !== "reconnect") {
-                if (!node.deviceConfig || node.deviceConfig.onvifStatus != "connected") {
-                    node.error("This node is not connected to a device");
-                    return;
-                }
 
-                if (!utils.hasService(node.deviceConfig.cam, 'event')) {
-                    node.error("The device has no support for an event service");
+        node.on("input", function (msg) {
+            const action = node.action || msg.action;
+            if (!action) {
+                node.error("No action specified (node or msg)");
+                return;
+            }
+
+            if (action !== "reconnect") {
+                if (!node.deviceConfig || node.deviceConfig.onvifStatus !== "connected") {
+                    node.error("Not connected to device");
+                    return;
+                }
+                if (!utils.hasService(node.deviceConfig.cam, "event")) {
+                    node.error("Event service not supported by device");
                     return;
                 }
             }
-            
-            // Seems that some Axis cams support pull point, although they return WSPullPointSupport 'false'
-            /*if (!node.deviceConfig.cam.capabilities.events.WSPullPointSupport == true) {
-                //console.warn('Ignoring input message since the device does not support pull point subscription');
-                return;
-            }*/
-            
-            newMsg.xaddr = this.deviceConfig.xaddress;
-            newMsg.action = action;
+
+            const newMsg = {
+                action,
+                xaddr: node.deviceConfig?.xaddress
+            };
 
             try {
                 switch (action) {
                     case "start":
                         if (node.eventListener) {
-                            node.error("This node is already listening to device events");
+                            node.error("Already listening to events");
                             return;
                         }
-                        
-                        // Overwrite the device status text
-                        utils.setNodeStatus(node, 'event',"listening");
-                        
-                        node.eventListener = function(camMessage) {
-                            var sourceName  = null;
-                            var sourceValue = null;
-                            var dataName    = null;
-                            var dataValue   = null;
-                            
-                            // Events have a Topic
-                            // Events have (optionally) a Source, a Key and Data fields
-                            // The Source,Key and Data fields can be single items or an array of items
-                            // The Source,Key and Data fields can be of type SimpleItem or a Complex Item
-                            //    - Topic
-                            //    - Message/Message/$
-                            //    - Message/Message/Source...
-                            //    - Message/Message/Key...
-                            //    - Message/Message/Data/SimpleItem/[index]/$/name   (array of items)
-                            // OR - Message/Message/Data/SimpleItem/$/name   (single item)
-                            //    - Message/Message/Data/SimpleItem/[index]/$/value   (array of items)
-                            // OR - Message/Message/Data/SimpleItem/$/value   (single item)
 
-                            var eventTopic = camMessage.topic._;
-                            
-                            // Strip the namespaces from the topic (e.g. tns1:MediaControl/tnsavg:ConfigurationUpdateAudioEncCfg)
-                            // Split on '/', then remove any namespace for each part, and at the end recombine parts that were split with '/'
-                            let parts = eventTopic.split('/');
-                            eventTopic = "";
-                            for (var index = 0; index < parts.length; index++) {
-                                var stringNoNamespace = parts[index].split(':').pop();
-                                if (eventTopic.length == 0) {
-                                    eventTopic += stringNoNamespace;
-                                } else {
-                                    eventTopic += '/' + stringNoNamespace;
-                                }
-                            }
+                        utils.setNodeStatus(node, "event", "listening");
 
-                            var outputMsg = {
-                                topic: eventTopic,
-                                time: camMessage.message.message.$.UtcTime,
-                                property: camMessage.message.message.$.PropertyOperation // Initialized, Deleted or Changed but missing/undefined on the Avigilon 4 channel encoder
-                            };
+                        node.eventListener = (camMessage) => {
+                            try {
+                                const topicRaw = camMessage?.topic?._;
+                                if (!topicRaw) return;
 
-                            // Only handle simpleItem
-                            // Only handle one 'source' item
-                            // Ignore the 'key' item  (nothing I own produces it)
-                            // Handle all the 'Data' items
+                                // Strip namespaces
+                                const topic = topicRaw
+                                    .split("/")
+                                    .map(p => p.split(":").pop())
+                                    .join("/");
 
-                            // SOURCE (Name:Value)
-                            if (camMessage.message.message.source && camMessage.message.message.source.simpleItem) {
-                                if (Array.isArray(camMessage.message.message.source.simpleItem)) {
-                                    // TODO : currently we only process the first event source item ...
-                                    outputMsg.source = {
-                                        name:  camMessage.message.message.source.simpleItem[0].$.Name,
-                                        value: camMessage.message.message.source.simpleItem[0].$.Value
+                                const msgBody = camMessage?.message?.message || {};
+                                const meta = msgBody.$ || {};
+
+                                const output = {
+                                    topic,
+                                    time: meta.UtcTime,
+                                    property: meta.PropertyOperation
+                                };
+
+                                // SOURCE
+                                const src = msgBody.source?.simpleItem;
+                                if (src) {
+                                    const item = Array.isArray(src) ? src[0] : src;
+                                    if (item?.$) {
+                                        output.source = {
+                                            name: item.$.Name,
+                                            value: item.$.Value
+                                        };
                                     }
                                 }
-                                else {
-                                    outputMsg.source = {
-                                        name: camMessage.message.message.source.simpleItem.$.Name,
-                                        value: camMessage.message.message.source.simpleItem.$.Value
-                                    }
-                                }
-                            }
-                            
-                            //KEY
-                            if (camMessage.message.message.key) {
-                                outputMsg.key = camMessage.message.message.key;
-                            }
 
-                            // DATA (Name:Value)
-                            if (camMessage.message.message.data && camMessage.message.message.data.simpleItem) {
-                                if (Array.isArray(camMessage.message.message.data.simpleItem)) {
-                                    for (var x  = 0; x < camMessage.message.message.data.simpleItem.length; x++) {
-                                        outputMsg.data = {
-                                            name: camMessage.message.message.data.simpleItem[x].$.Name,
-                                            value: camMessage.message.message.data.simpleItem[x].$.Value
-                                        }
-                                    }
+                                // KEY (pass-through)
+                                if (msgBody.key) {
+                                    output.key = msgBody.key;
                                 }
-                                else {
-                                    outputMsg.data = {
-                                        name: camMessage.message.message.data.simpleItem.$.Name,
-                                        value: camMessage.message.message.data.simpleItem.$.Value
-                                    }
-                                }
-                            }
-                            else if (camMessage.message.message.data && camMessage.message.message.data.elementItem) {
-                                outputMsg.data = {
-                                    dataName: 'elementItem',
-                                    dataValue: JSON.stringify(camMessage.message.message.data.elementItem)
-                                }
-                            }
 
-                            // As soon as we get an event from the camera, we will send it to the output of this node
-                            node.send(outputMsg);
-                        }
-                        
-                        // Start listening to events from the camera
-                        node.deviceConfig.cam.on('event', node.eventListener);
+                                // DATA
+                                const data = msgBody.data;
+                                if (data?.simpleItem) {
+                                    const items = Array.isArray(data.simpleItem)
+                                        ? data.simpleItem
+                                        : [data.simpleItem];
+
+                                    output.data = items.map(i => ({
+                                        name: i.$?.Name,
+                                        value: i.$?.Value
+                                    }));
+                                }
+                                else if (data?.elementItem) {
+                                    output.data = {
+                                        type: "elementItem",
+                                        value: data.elementItem
+                                    };
+                                }
+
+                                node.send(output);
+                            }
+                            catch (err) {
+                                node.warn(`Event parse error: ${err.message}`);
+                            }
+                        };
+
+                        node.deviceConfig.cam.on("event", node.eventListener);
                         break;
+
                     case "stop":
                         if (!node.eventListener) {
-                            node.error("This node was not listening to events anyway");
+                            node.error("Not currently listening");
                             return;
                         }
 
-                        // Stop listening to events from the camera
-                        node.deviceConfig.cam.removeListener('event', node.eventListener);
+                        node.deviceConfig.cam.removeListener("event", node.eventListener);
                         node.eventListener = null;
-                        
-                        // When we stop listening, just show status "connected"
-                        utils.setNodeStatus(node, 'event', "connected");
-                        break;               
+                        utils.setNodeStatus(node, "event", "connected");
+                        break;
+
                     case "getEventProperties":
-                        node.deviceConfig.cam.getEventProperties(function(err, date, xml) {
-                            if (!err) {
-                                var simplifiedDate = {};
-                                
-                                // Simplify the soap message to a compact message, by keeping only all relevant information
-                                function simplifyNode(node, simplifiedDateChild) {
-                                    // loop over all the child nodes in this node
-                                    for (const child in node) {
-                                        switch (child) {
-                                            case "$":
-                                                // Continue to the next child in the list (same level)
-                                                continue;
-                                            case "messageDescription":
-                                                // Collect the details that belong to the event
-                                                var source = '';
-                                                var date = '';
-                                                
-                                                if (node[child].source && node[child].source.simpleItemDescription) {
-                                                    simplifiedDateChild.source = node[child].source.simpleItemDescription.$;
-                                                }
-                                                if (node[child].data && node[child].data.simpleItemDescriptio) {
-                                                    simplifiedDateChild.date = node[child].data.simpleItemDescription.$;
-                                                }
-                                                
-                                                return;
-                                            default:
-                                                // Decend recursively into the child node, looking for the messageDescription
-                                                simplifiedDateChild[child] = {};
-                                                simplifyNode(node[child], simplifiedDateChild[child]);
-                                        }
-                                    }
-                                }
-                                simplifyNode(date.topicSet, simplifiedDate)
+                        node.deviceConfig.cam.getEventProperties((err, data, xml) => {
+                            if (err) {
+                                utils.handleResult(node, err, null, xml, newMsg);
+                                return;
                             }
-                            
-                            utils.handleResult(node, err, simplifiedDate, null, newMsg);
+
+                            const simplified = {};
+
+                            function simplify(src, dst) {
+                                if (!src || typeof src !== "object") return;
+                                for (const k in src) {
+                                    if (k === "$") continue;
+                                    if (k === "messageDescription") {
+                                        dst.messageDescription = src[k];
+                                        return;
+                                    }
+                                    dst[k] = {};
+                                    simplify(src[k], dst[k]);
+                                }
+                            }
+
+                            simplify(data?.topicSet, simplified);
+                            utils.handleResult(node, null, simplified, xml, newMsg);
                         });
                         break;
+
                     case "getEventServiceCapabilities":
-                        node.deviceConfig.cam.getEventServiceCapabilities(function(err, date, xml) {
-                            utils.handleResult(node, err, date, xml, newMsg);
-                        });
+                        node.deviceConfig.cam.getEventServiceCapabilities(
+                            (err, data, xml) =>
+                                utils.handleResult(node, err, data, xml, newMsg)
+                        );
                         break;
+
                     case "reconnect":
-                        node.deviceConfig.cam.connect(function(err) {
-                            utils.handleResult(node, err, "", null, newMsg);
-                        });
-                        break
+                        try {
+                            node.deviceConfig.cam.connect();
+                        } catch (err) {
+                            node.error(`Reconnect failed: ${err.message}`);
+                        }
+                        break;
+
                     default:
-                        //node.status({fill:"red",shape:"dot",text: "unsupported action"});
-                        node.error("Action " + action + " is not supported");                   
+                        node.error(`Unsupported action: ${action}`);
                 }
             }
-            catch (exc) {
-                node.error("Action " + action + " failed: " + exc);
+            catch (err) {
+                node.error(`Action ${action} failed: ${err.message}`);
             }
         });
-        
-        node.on("close",function() { 
-            if (node.listener) {
+
+        node.on("close", () => {
+            if (node.listener && node.deviceConfig) {
                 node.deviceConfig.removeListener("onvif_status", node.listener);
             }
-
-            // Stop listening to events from the camera
-            if (node.eventListener) {
-                node.deviceConfig.cam.removeListener('event', node.eventListener);
+            if (node.eventListener && node.deviceConfig) {
+                try {
+                    node.deviceConfig.cam.removeListener("event", node.eventListener);
+                } catch (_) {}
                 node.eventListener = null;
             }
         });
     }
-    RED.nodes.registerType("onvif-events",OnVifEventsNode);
-}
+
+    RED.nodes.registerType("onvif-events", OnVifEventsNode);
+};
