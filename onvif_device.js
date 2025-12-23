@@ -18,124 +18,130 @@
  * limitations under the License.
  */
 
- module.exports = function(RED) {
-    var settings = RED.settings;
-    const onvif = require('onvif');
-    const utils = require('./utils');
-    
+module.exports = function (RED) {
+    const onvif = require("onvif");
+    const utils = require("./utils");
+
     function OnVifDeviceNode(config) {
         RED.nodes.createNode(this, config);
+
         this.action = config.action;
-        
-        var node = this;
-        
-        // Retrieve the config node, where the device is configured
+        const node = this;
+
         node.deviceConfig = RED.nodes.getNode(config.deviceConfig);
-        
+
         if (node.deviceConfig) {
-            node.listener = function(onvifStatus) {
-                utils.setNodeStatus(node, 'device', onvifStatus);
-            }
-            
-            // Start listening for Onvif config nodes status changes
+            node.listener = function (onvifStatus) {
+                utils.setNodeStatus(node, "device", onvifStatus);
+            };
+
             node.deviceConfig.addListener("onvif_status", node.listener);
-            
-            // Show the current Onvif config node status already
-            utils.setNodeStatus(node, 'device', node.deviceConfig.onvifStatus);
-            
+            utils.setNodeStatus(node, "device", node.deviceConfig.onvifStatus);
+
             node.deviceConfig.initialize();
         }
 
-        node.on("input", function(msg) {  
-            var newMsg = {};
-            
-            var action = node.action || msg.action;
-            
+        node.on("input", function (msg) {
+            const newMsg = {};
+            const action = node.action || msg.action;
+
             if (!action) {
-                console.warn('When no action specified in the node, it should be specified in the msg.action');
+                node.warn(
+                    "No action specified (configure node or set msg.action)"
+                );
                 return;
             }
-            
-            // Don't perform these checks when e.g. the device is currently disconnected (because then e.g. no capabilities are loaded yet)
+
+            // Connection checks (except reconnect)
             if (action !== "reconnect") {
-                if (!node.deviceConfig || node.deviceConfig.onvifStatus !== "connected") {
+                if (
+                    !node.deviceConfig ||
+                    node.deviceConfig.onvifStatus !== "connected"
+                ) {
                     node.error("This node is not connected to a device");
                     return;
                 }
 
-                if (!utils.hasService(node.deviceConfig.cam, 'device')) {
-                    node.error("The device has no support for a device service");
+                if (!utils.hasService(node.deviceConfig.cam, "device")) {
+                    node.error(
+                        "The device does not support the ONVIF Device service"
+                    );
                     return;
                 }
             }
-            
-            newMsg.xaddr = this.deviceConfig.xaddress;
+
+            newMsg.xaddr = node.deviceConfig.xaddress;
             newMsg.action = action;
 
             try {
+                const cam = node.deviceConfig.cam;
+
                 switch (action) {
                     case "getDeviceInformation":
-                        node.deviceConfig.cam.getDeviceInformation(function(err, date, xml) {
-                            utils.handleResult(node, err, date, xml, newMsg);
+                        cam.getDeviceInformation((err, data, xml) => {
+                            utils.handleResult(node, err, data, xml, newMsg);
                         });
                         break;
+
                     case "getHostname":
-                        node.deviceConfig.cam.getHostname(function(err, date, xml) {
-                            utils.handleResult(node, err, date, xml, newMsg);
+                        cam.getHostname((err, data, xml) => {
+                            utils.handleResult(node, err, data, xml, newMsg);
                         });
-                        break;               
+                        break;
+
                     case "getSystemDateAndTime":
-                        node.deviceConfig.cam.getSystemDateAndTime(function(err, date, xml) {
-                            utils.handleResult(node, err, date, xml, newMsg);
+                        cam.getSystemDateAndTime((err, data, xml) => {
+                            utils.handleResult(node, err, data, xml, newMsg);
                         });
-                        break;                     
+                        break;
+
                     case "getServices":
-                        node.deviceConfig.cam.getCapabilities(function(err, date, xml) {
-                            utils.handleResult(node, err, date, xml, newMsg);
-                        });
-                        break;
                     case "getCapabilities":
-                        node.deviceConfig.cam.getCapabilities(function(err, date, xml) {
-                            utils.handleResult(node, err, date, xml, newMsg);
-                        });
-                        break;
-                    case "getScopes":
-                        node.deviceConfig.cam.getScopes(function(err, date, xml) {
-                            utils.handleResult(node, err, date, xml, newMsg);
-                        });
-                        break;
-                    case "systemReboot":
-                        node.deviceConfig.cam.systemReboot(function(err, date, xml) {
-                            utils.handleResult(node, err, date, xml, newMsg);
-                        });
-                        break;
                     case "getServiceCapabilities":
-                        node.deviceConfig.cam.getCapabilities(function(err, date, xml) {
-                            utils.handleResult(node, err, date, xml, newMsg);
+                        cam.getCapabilities((err, data, xml) => {
+                            utils.handleResult(node, err, data, xml, newMsg);
                         });
-                        break;      
+                        break;
+
+                    case "getScopes":
+                        cam.getScopes((err, data, xml) => {
+                            utils.handleResult(node, err, data, xml, newMsg);
+                        });
+                        break;
+
+                    case "systemReboot":
+                        cam.systemReboot((err, data, xml) => {
+                            utils.handleResult(node, err, data, xml, newMsg);
+                        });
+                        break;
+
                     case "reconnect":
-                        node.deviceConfig.cam.connect(function(err) {
+                        cam.connect((err) => {
+                            if (err) {
+                                node.error("Reconnect failed: " + err.message);
+                            }
                             utils.handleResult(node, err, "", null, newMsg);
                         });
-                        break
+                        break;
+
                     default:
-                        //node.status({fill:"red",shape:"dot",text: "unsupported action"});
-                        node.error("Action " + action + " is not supported");                    
+                        node.error("Action '" + action + "' is not supported");
                 }
-            }
-            catch (exc) {
-                node.error("Action " + action + " failed: " + exc);
+            } catch (err) {
+                node.error("Action '" + action + "' failed: " + err.message);
             }
         });
-        
-        node.on("close",function() { 
-            if (node.listener) {
-                node.deviceConfig.removeListener("onvif_status", node.listener);
+
+        node.on("close", function () {
+            if (node.listener && node.deviceConfig) {
+                node.deviceConfig.removeListener(
+                    "onvif_status",
+                    node.listener
+                );
             }
         });
     }
-    RED.nodes.registerType("onvif2026-device", OnvifDeviceNode);
-}
 
-
+    // ✅ FIXED constructor name reference
+    RED.nodes.registerType("onvif2026-device", OnVifDeviceNode);
+};
