@@ -18,60 +18,69 @@
  * limitations under the License.
  */
 
- module.exports = function(RED) {
-    var settings = RED.settings;
-    const onvif  = require('onvif');
+module.exports = function (RED) {
     const utils = require('./utils');
 
     function OnVifRecordingNode(config) {
         RED.nodes.createNode(this, config);
-        
-        var node = this; 
-        
-        // Retrieve the config node, where the device is configured
+        const node = this;
+
         node.deviceConfig = RED.nodes.getNode(config.deviceConfig);
-        
+
+        /**
+         * Status listener for device state changes
+         */
         if (node.deviceConfig) {
-            node.listener = function(onvifStatus) {
+            node.statusListener = function (onvifStatus) {
                 utils.setNodeStatus(node, 'recording', onvifStatus);
-            }
-            
-            // Start listening for Onvif config nodes status changes
-            node.deviceConfig.addListener("onvif_status", node.listener);
-            
-            // Show the current Onvif config node status already
+            };
+
+            node.deviceConfig.on('onvif_status', node.statusListener);
+
+            // Show current status immediately
             utils.setNodeStatus(node, 'recording', node.deviceConfig.onvifStatus);
-            
+
             node.deviceConfig.initialize();
         }
 
-        node.on("input", function(msg) {  
-            var newMsg = {};
-            
-            if (!node.deviceConfig || node.deviceConfig.onvifStatus != "connected") {
-                node.error("This node is not connected to a device");
+        /**
+         * Input handler
+         */
+        node.on('input', function (msg) {
+            if (!node.deviceConfig || node.deviceConfig.onvifStatus !== 'connected') {
+                node.error('This node is not connected to a device', msg);
                 return;
             }
 
-            if (!utils.hasService(node.deviceConfig.cam, 'recording')) {
-                node.error("The device does no support for a recording service");
+            const cam = node.deviceConfig.cam;
+
+            if (!utils.hasService(cam, 'recording')) {
+                node.error('The device does not support the ONVIF Recording service', msg);
                 return;
             }
 
-            newMsg.xaddr = this.deviceConfig.xaddress;
-            
-            // TODO deze function call geeft steeds "Error: Wrong ONVIF SOAP response"
-            // Kan het zijn dat panasonic geen recording service heeft ???
-            node.deviceConfig.cam.getRecordings(function(err, stream, xml) {
-                utils.handleResult(node, err, stream, xml, newMsg);
-            });
+            const outMsg = RED.util.cloneMessage(msg);
+            outMsg.xaddr = node.deviceConfig.xaddress;
+
+            try {
+                cam.getRecordings(function (err, recordings, xml) {
+                    utils.handleResult(node, err, recordings, xml, outMsg);
+                });
+            } catch (err) {
+                node.error('getRecordings failed: ' + err.message, msg);
+            }
         });
-        
-        node.on("close",function() { 
-            if (node.listener) {
-                node.deviceConfig.removeListener("onvif_status", node.listener);
+
+        /**
+         * Cleanup
+         */
+        node.on('close', function () {
+            if (node.deviceConfig && node.statusListener) {
+                node.deviceConfig.removeListener('onvif_status', node.statusListener);
             }
+            node.status({});
         });
     }
-    RED.nodes.registerType("onvif-recording",OnVifRecordingNode);
-}
+
+    RED.nodes.registerType('onvif-recording', OnVifRecordingNode);
+};
