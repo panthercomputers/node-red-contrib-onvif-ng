@@ -9,195 +9,195 @@
  */
 
 module.exports = function (RED) {
-    const utils = require("./utils");
-    const { onvifCall } = require("./utils/onvifCall");
+    const onvifCall = require('./onvif/onvifCall');
+    const utils = require('./onvif/utils');
 
     function OnVifEventsNode(config) {
         RED.nodes.createNode(this, config);
         const node = this;
 
         node.action = config.action;
-        node.interval = Number(config.interval) || 5000;
-        node.pullTimer = null;
-        node.subscriptionId = null;
-        node.active = false;
-
         node.deviceConfig = RED.nodes.getNode(config.deviceConfig);
+        node.eventListener = null;
 
-        /* ---------------------------------------------------------
-         * Device status listener
-         * --------------------------------------------------------- */
+        /* ---------- STATUS TRACKING ---------- */
         if (node.deviceConfig) {
             node.listener = (status) => {
-                utils.setNodeStatus(node, "events", status);
-
-                if (status !== "connected") {
-                    stopPullLoop();
+                if (status !== 'connected' && node.eventListener) {
+                    stopListening();
                 }
+                utils.setNodeStatus(
+                    node,
+                    'event',
+                    node.eventListener ? 'listening' : status
+                );
             };
 
-            node.deviceConfig.addListener("onvif_status", node.listener);
-            utils.setNodeStatus(node, "events", node.deviceConfig.onvifStatus);
+            node.deviceConfig.addListener('onvif_status', node.listener);
+            utils.setNodeStatus(node, 'event', node.deviceConfig.onvifStatus);
             node.deviceConfig.initialize();
         }
 
-        /* ---------------------------------------------------------
-         * Pull loop control
-         * --------------------------------------------------------- */
-        function stopPullLoop() {
-            if (node.pullTimer) {
-                clearTimeout(node.pullTimer);
-                node.pullTimer = null;
-            }
-            node.active = false;
-        }
-
-        async function startPullLoop() {
-            if (node.active) {
-                return;
-            }
-            node.active = true;
-            await pullOnce();
-        }
-
-        async function pullOnce() {
-            if (!node.active) {
-                return;
-            }
-
+        /* ---------- EVENT NORMALIZATION ---------- */
+        function normalizeEvent(camMessage) {
             try {
-                const { data } = await onvifCall({
-                    node,
-                    cam: node.deviceConfig.cam,
-                    method: "pullMessages",
-                    args: {
-                        Timeout: node.interval,
-                        MessageLimit: 10
-                    },
-                    timeout: node.interval + 2000
-                });
+                const msg = camMessage?.message?.message;
+                if (!msg) return null;
 
-                if (data?.NotificationMessage?.length) {
-                    const messages = Array.isArray(data.NotificationMessage)
-                        ? data.NotificationMessage
-                        : [data.NotificationMessage];
+                /* Topic cleanup (strip namespaces) */
+                let topic = camMessage.topic?._ || '';
+                topic = topic
+                    .split('/')
+                    .map(p => p.split(':').pop())
+                    .join('/');
 
-                    messages.forEach(event => {
-                        node.send({
-                            payload: event,
-                            topic: event?.Topic?._ || "onvif/event"
-                        });
-                    });
+                const out = {
+                    topic,
+                    time: msg.$?.UtcTime,
+                    property: msg.$?.PropertyOperation
+                };
+
+                /* Source */
+                const source = msg.source?.simpleItem;
+                if (source) {
+                    const s = Array.isArray(source) ? source[0] : source;
+                    out.source = {
+                        name: s.$?.Name,
+                        value: s.$?.Value
+                    };
                 }
+
+                /* Data */
+                const data = msg.data;
+                if (data?.simpleItem) {
+                    const items = Array.isArray(data.simpleItem)
+                        ? data.simpleItem
+                        : [data.simpleItem];
+
+                    out.data = items.map(i => ({
+                        name: i.$?.Name,
+                        value: i.$?.Value
+                    }));
+                }
+                else if (data?.elementItem) {
+                    out.data = data.elementItem;
+                }
+
+                return out;
             }
             catch (err) {
-                node.warn(`PullMessages failed: ${err.message}`);
-            }
-            finally {
-                if (node.active) {
-                    node.pullTimer = setTimeout(pullOnce, node.interval);
-                }
+                node.warn(`Failed to parse event: ${err.message}`);
+                return null;
             }
         }
 
-        /* ---------------------------------------------------------
-         * Input handler
-         * --------------------------------------------------------- */
-        node.on("input", async function (msg) {
+        /* ---------- START LISTENING ---------- */
+        function startListening() {
+            if (node.eventListener) {
+                node.warn('Already listening for events');
+                return;
+            }
+
+            node.eventListener = (camMessage) => {
+                const out = normalizeEvent(camMessage);
+                if (out) {
+                    node.send(out);
+                }
+            };
+
+            node.deviceConfig.cam.on('event', node.eventListener);
+            utils.setNodeStatus(node, 'event', 'listening');
+        }
+
+        /* ---------- STOP LISTENING ---------- */
+        function stopListening() {
+            if (!node.eventListener) return;
+
+            try {
+                node.deviceConfig.cam.removeListener('event', node.eventListener);
+            } catch (_) {}
+
+            node.eventListener = null;
+            utils.setNodeStatus(node, 'event', 'connected');
+        }
+
+        /* ---------- INPUT ---------- */
+        node.on('input', function (msg) {
             const action = node.action || msg.action;
             if (!action) {
-                node.error("No action specified");
+                node.error('No action specified', msg);
                 return;
             }
 
-            if (!node.deviceConfig || node.deviceConfig.onvifStatus !== "connected") {
-                node.error("Device not connected");
-                return;
-            }
-
-            if (!utils.hasService(node.deviceConfig.cam, "events")) {
-                node.error("Events service not supported");
-                return;
-            }
-
-            try {
-                switch (action) {
-
-                    case "subscribe": {
-                        stopPullLoop();
-
-                        const { data } = await onvifCall({
-                            node,
-                            cam: node.deviceConfig.cam,
-                            method: "createPullPointSubscription",
-                            timeout: 10000
-                        });
-
-                        node.subscriptionId = data?.SubscriptionReference?.Address;
-                        await startPullLoop();
-                        break;
-                    }
-
-                    case "unsubscribe": {
-                        stopPullLoop();
-
-                        if (node.subscriptionId) {
-                            await onvifCall({
-                                node,
-                                cam: node.deviceConfig.cam,
-                                method: "unsubscribe",
-                                timeout: 5000
-                            });
-                            node.subscriptionId = null;
-                        }
-                        break;
-                    }
-
-                    case "reconnect": {
-                        stopPullLoop();
-                        await onvifCall({
-                            node,
-                            cam: node.deviceConfig.cam,
-                            method: "connect",
-                            retries: 0
-                        });
-                        break;
-                    }
-
-                    default:
-                        node.error(`Unsupported action: ${action}`);
+            if (action !== 'reconnect') {
+                if (!node.deviceConfig || node.deviceConfig.onvifStatus !== 'connected') {
+                    node.error('Not connected to device');
+                    return;
+                }
+                if (!utils.hasService(node.deviceConfig.cam, 'event')) {
+                    node.error('Event service not supported');
+                    return;
                 }
             }
-            catch (err) {
-                node.error(`Action failed: ${err.message}`);
+
+            const newMsg = {
+                ...msg,
+                action,
+                xaddr: node.deviceConfig?.xaddress
+            };
+
+            switch (action) {
+
+                case 'start':
+                    startListening();
+                    break;
+
+                case 'stop':
+                    stopListening();
+                    break;
+
+                case 'getEventProperties':
+                    onvifCall(node, {
+                        service: 'event',
+                        method: 'getEventProperties',
+                        msg: newMsg,
+                        onSuccess: (data, xml) =>
+                            utils.handleResult(node, null, data, xml, newMsg)
+                    });
+                    break;
+
+                case 'getEventServiceCapabilities':
+                    onvifCall(node, {
+                        service: 'event',
+                        method: 'getEventServiceCapabilities',
+                        msg: newMsg,
+                        onSuccess: (data, xml) =>
+                            utils.handleResult(node, null, data, xml, newMsg)
+                    });
+                    break;
+
+                case 'reconnect':
+                    stopListening();
+                    onvifCall(node, {
+                        allowDisconnected: true,
+                        method: 'connect',
+                        msg: newMsg
+                    });
+                    break;
+
+                default:
+                    node.error(`Unsupported action: ${action}`, msg);
             }
         });
 
-        /* ---------------------------------------------------------
-         * Cleanup
-         * --------------------------------------------------------- */
-        node.on("close", async function () {
-            stopPullLoop();
-
-            try {
-                if (node.subscriptionId && node.deviceConfig?.cam) {
-                    await onvifCall({
-                        node,
-                        cam: node.deviceConfig.cam,
-                        method: "unsubscribe",
-                        timeout: 3000
-                    });
-                }
-            }
-            catch (_) {
-                // ignore shutdown errors
-            }
-
+        /* ---------- CLEANUP ---------- */
+        node.on('close', function () {
+            stopListening();
             if (node.listener && node.deviceConfig) {
-                node.deviceConfig.removeListener("onvif_status", node.listener);
+                node.deviceConfig.removeListener('onvif_status', node.listener);
             }
         });
     }
 
-    RED.nodes.registerType("onvif-events", OnVifEventsNode);
+    RED.nodes.registerType('onvif-events', OnVifEventsNode);
 };
