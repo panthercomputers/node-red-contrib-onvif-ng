@@ -5,132 +5,144 @@
  * Modifications:
  * Copyright 2025 Panther Computers
  *
- * Licensed under the Apache License, Version 2.0
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 module.exports = function (RED) {
-    const onvif = require("onvif");
+    const onvif = require('onvif');
 
     function OnVifDiscoveryNode(config) {
         RED.nodes.createNode(this, config);
         const node = this;
 
-        node.timeout = Math.max(Number(config.timeout) || 5, 1) * 1000;
+        node.timeout = Number(config.timeout || 5) * 1000; // seconds → ms
         node.separate = !!config.separate;
         node.discovering = false;
 
-        /* ---------------------------------------------------------
-         * Normalize ONVIF discovery result
-         * --------------------------------------------------------- */
+        /**
+         * Simplify discovery results for Node-RED consumption
+         */
         function simplifyResult(result) {
             if (!result?.probeMatches?.probeMatch) {
                 return null;
             }
 
-            const pm = result.probeMatches.probeMatch;
+            const probeMatch = result.probeMatches.probeMatch;
 
-            const normalize = (v) =>
-                typeof v === "string" ? v.trim().split(/\s+/) : v;
+            if (typeof probeMatch.types === 'string') {
+                probeMatch.types = probeMatch.types.trim().split(/\s+/);
+            }
 
-            return {
-                urn: pm.endpointReference?.address || null,
-                types: normalize(pm.types),
-                scopes: normalize(pm.scopes),
-                xaddrs: normalize(pm.XAddrs),
-                metadataVersion: pm.metadataVersion
-            };
+            if (typeof probeMatch.scopes === 'string') {
+                probeMatch.scopes = probeMatch.scopes.trim().split(/\s+/);
+            }
+
+            if (typeof probeMatch.XAddrs === 'string') {
+                probeMatch.XAddrs = probeMatch.XAddrs.trim().split(/\s+/);
+            }
+
+            return probeMatch;
         }
 
-        /* ---------------------------------------------------------
+        /**
          * Input handler
-         * --------------------------------------------------------- */
-        node.on("input", function (msg) {
+         */
+        node.on('input', function (msg) {
             if (node.discovering) {
-                node.warn("Discovery already in progress");
+                node.warn('Discovery already in progress, request ignored');
                 return;
             }
 
             node.discovering = true;
-            node.status({ fill: "yellow", shape: "dot", text: "discovering" });
+            node.status({ fill: 'yellow', shape: 'dot', text: 'discovering' });
 
             const options = {
                 timeout: node.timeout,
-                resolve: false
+                resolve: false // return raw device data, not Cam instances
             };
 
-            /* IMPORTANT:
-             * Discovery is global/static in onvif lib
-             * Remove previous listeners to avoid leaks
+            // Clean up any previous listeners (VERY IMPORTANT)
+            onvif.Discovery.removeAllListeners();
+
+            /**
+             * Per-device output mode
              */
-            onvif.Discovery.removeAllListeners("device");
-            onvif.Discovery.removeAllListeners("error");
-
-            const results = [];
-
             if (node.separate) {
-                onvif.Discovery.on("device", (result) => {
+                onvif.Discovery.on('device', function (result) {
                     const simplified = simplifyResult(result);
                     if (!simplified) {
                         return;
                     }
 
-                    const out = RED.util.cloneMessage(msg);
-                    out.payload = simplified;
-                    node.send(out);
+                    const outMsg = RED.util.cloneMessage(msg);
+                    outMsg.payload = simplified;
+                    node.send(outMsg);
                 });
             }
 
-            onvif.Discovery.once("error", (err) => {
-                node.error(`Discovery error: ${err.message || err}`);
+            /**
+             * Error handler (malformed SOAP responses, UDP noise, etc.)
+             */
+            onvif.Discovery.on('error', function (err) {
+                node.error('ONVIF discovery error: ' + err.message);
             });
 
-            onvif.Discovery.probe(options, (err, result) => {
+            /**
+             * Start discovery
+             */
+            onvif.Discovery.probe(options, function (err, results) {
                 try {
                     if (err) {
-                        node.error(err.message || err);
-                        node.status({ fill: "red", shape: "dot", text: "failed" });
+                        node.error(err.message);
+                        node.status({ fill: 'red', shape: 'dot', text: 'failed' });
                         return;
                     }
 
-                    const devices = Array.isArray(result)
-                        ? result
-                              .map(simplifyResult)
-                              .filter(Boolean)
-                        : [];
+                    node.status({
+                        fill: 'green',
+                        shape: 'dot',
+                        text: `completed (${results.length})`
+                    });
 
                     if (!node.separate) {
-                        const out = RED.util.cloneMessage(msg);
-                        out.payload = devices;
-                        node.send(out);
-                    }
+                        const devices = [];
 
-                    node.status({
-                        fill: "green",
-                        shape: "dot",
-                        text: `completed (${devices.length})`
-                    });
-                }
-                finally {
+                        for (const result of results) {
+                            const simplified = simplifyResult(result);
+                            if (simplified) {
+                                devices.push(simplified);
+                            }
+                        }
+
+                        const outMsg = RED.util.cloneMessage(msg);
+                        outMsg.payload = devices;
+                        node.send(outMsg);
+                    }
+                } finally {
                     node.discovering = false;
-                    onvif.Discovery.removeAllListeners("device");
-                    onvif.Discovery.removeAllListeners("error");
                 }
             });
         });
 
-        /* ---------------------------------------------------------
+        /**
          * Cleanup
-         * --------------------------------------------------------- */
-        node.on("close", function () {
-            node.discovering = false;
+         */
+        node.on('close', function () {
             node.status({});
-            onvif.Discovery.removeAllListeners("device");
-            onvif.Discovery.removeAllListeners("error");
+            node.discovering = false;
+            onvif.Discovery.removeAllListeners();
         });
     }
 
-    /* 🔴 CRITICAL FIX:
-     * Original file registered WRONG node type
-     */
-    RED.nodes.registerType("onvif-discovery", OnVifDiscoveryNode);
+    RED.nodes.registerType('onvif-discovery', OnVifDiscoveryNode);
 };
