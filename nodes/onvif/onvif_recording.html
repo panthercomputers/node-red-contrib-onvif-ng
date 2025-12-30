@@ -5,50 +5,76 @@
   Modifications:
   Copyright 2025 Panther Computers
 
-  Licensed under the Apache License, Version 2.0 (the "License");
+  Licensed under the Apache License, Version 2.0
 -->
-
 <script type="text/javascript">
-RED.nodes.registerType('onvif-recordings',{
+RED.nodes.registerType('onvif-recording', {
     category: 'OnVif',
     color: '#ff758d',
+
     defaults: {
-        name: {value:""},
-        deviceConfig: {value:"", type:"onvif-config"},
-        action: {value:""}
+        name: { value: "" },
+        deviceConfig: { value: "", type: "onvif-config", required: true },
+        action: { value: "", required: true }
     },
-    inputs:1,
-    outputs:1,
+
+    inputs: 1,
+    outputs: 1,
     icon: "recordings.png",
-    label: function() {
-        return this.name || "OnVif recordings";
+
+    label: function () {
+        return this.name || "ONVIF Recording";
     }
 });
 </script>
 
-<script type="text/x-red" data-template-name="onvif-recordings">
+<script type="text/x-red" data-template-name="onvif-recording">
     <div class="form-row">
-        <label for="node-input-deviceConfig">
+        <label>
             <i class="fa fa-cog"></i> Device
         </label>
         <input type="text" id="node-input-deviceConfig">
     </div>
 
     <div class="form-row">
-        <label for="node-input-action">
+        <label>
             <i class="fa fa-wrench"></i> Action
         </label>
-        <input type="text" id="node-input-action">
+        <select id="node-input-action">
+            <option value=""></option>
+            <option value="getRecording">Get recording</option>
+            <option value="getRecordingConfiguration">Get recording configuration</option>
+            <option value="getRecordingOptions">Get recording options</option>
+            <option value="getServiceCapabilities">Get service capabilities</option>
+            <option value="reconnect">Reconnect</option>
+        </select>
     </div>
 
+    <hr>
+
     <div class="form-row">
-        <label for="node-input-name">
-            <i class="icon-tag"></i> Name
+        <label>
+            <i class="fa fa-tag"></i> Name
         </label>
-        <input type="text" id="node-input-name">
+        <input type="text" id="node-input-name" placeholder="ONVIF Recording">
     </div>
 </script>
 
-<script type="text/x-red" data-help-name="onvif-recordings">
-    <p>ONVIF recordings service node.</p>
+<script type="text/x-red" data-help-name="onvif-recording">
+    <p>
+        <strong>ONVIF Recording</strong>
+    </p>
+    <p>
+        Provides access to the ONVIF Recording service for compatible devices.
+    </p>
+    <ul>
+        <li><b>Get recording</b> — list available recording</li>
+        <li><b>Get recording configuration</b> — retrieve configuration details</li>
+        <li><b>Get recording options</b> — retrieve supported recording options</li>
+        <li><b>Get service capabilities</b> — retrieve recording service capabilities</li>
+    </ul>
+    <p>
+        If no action is selected, the action may be supplied dynamically via
+        <code>msg.action</code>.
+    </p>
 </script>
