@@ -5,24 +5,73 @@
   Modifications:
   Copyright 2025 Panther Computers
 
-  Licensed under the Apache License, Version 2.0 (the "License");
+  Licensed under the Apache License, Version 2.0
 -->
-
 <script type="text/javascript">
 RED.nodes.registerType('onvif-imaging',{
     category: 'OnVif',
     color: '#ff758d',
     defaults: {
         name: {value:""},
-        deviceConfig: {value:"", type:"onvif-config"},
+        deviceConfig: {value:"", type:"onvif-config", required:true},
         profile: {value:""},
-        action: {value:""}
+        action: {value:"", required:true}
     },
     inputs:1,
     outputs:1,
     icon:"imaging.png",
     label: function() {
-        return this.name || "OnVIf imaging";
+        return this.name || "ONVIF Imaging";
+    },
+
+    oneditprepare: function () {
+        const toggleFields = () => {
+            const action = $("#node-input-action").val();
+            $(".actionParam-row").hide();
+
+            if (action === "getImagingSettings" || action === "setImagingSettings") {
+                $("#profile-div").show();
+            }
+        };
+
+        $("#node-input-action").on("change", toggleFields);
+
+        /* ---- Profile autocomplete ---- */
+        try {
+            $("#node-input-profile").autocomplete("destroy");
+        } catch(e) {}
+
+        $("#node-input-profile-search").on("click", function () {
+            const configId = $("#node-input-deviceConfig").val();
+            if (!configId) return;
+
+            const configNode = RED.nodes.node(configId);
+            if (!configNode) return;
+
+            const cfg = {
+                hostname: configNode.xaddress,
+                port: configNode.port,
+                user: configNode.credentials?.user,
+                password: configNode.credentials?.password
+            };
+
+            $.getJSON("onvifdevice/profiles/" + configId, cfg, function (profiles) {
+                $("#node-input-profile").autocomplete({
+                    source: profiles,
+                    minLength: 0,
+                    select: function (e, ui) {
+                        e.preventDefault();
+                        $("#node-input-profile").val(ui.item.value);
+                    },
+                    focus: function (e, ui) {
+                        e.preventDefault();
+                        $("#node-input-profile").val(ui.item.value);
+                    }
+                }).autocomplete("search","");
+            });
+        });
+
+        toggleFields();
     }
 });
 </script>
@@ -44,10 +93,15 @@ RED.nodes.registerType('onvif-imaging',{
         </select>
     </div>
 
-    <div class="form-row">
-        <label>Profile token</label>
-        <input type="text" id="node-input-profile">
+    <div class="form-row actionParam-row" id="profile-div">
+        <label>Profile</label>
+        <input type="text" id="node-input-profile" style="width:65%">
+        <a id="node-input-profile-search" class="btn">
+            <i class="fa fa-search"></i>
+        </a>
     </div>
+
+    <hr>
 
     <div class="form-row">
         <label>Name</label>
@@ -56,5 +110,9 @@ RED.nodes.registerType('onvif-imaging',{
 </script>
 
 <script type="text/x-red" data-help-name="onvif-imaging">
-<p>Interact with the ONVIF imaging service.</p>
+<p>Interact with the ONVIF Imaging service.</p>
+<p>
+<strong>Get settings</strong> retrieves the current imaging configuration for the selected profile.<br>
+<strong>Set settings</strong> updates imaging parameters using values from <code>msg.payload</code>.
+</p>
 </script>
