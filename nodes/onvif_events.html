@@ -1,69 +1,91 @@
 <!--
-  Copyright 2018, Bart Butenaers
+  Original work:
+  Copyright 2018 Bart Butenaers
+
+  Modifications:
+  Copyright 2025 Panther Computers
+
   Licensed under the Apache License, Version 2.0 (the "License");
-  you may not use this file except in compliance with the License.
-  You may obtain a copy of the License at
-  http://www.apache.org/licenses/LICENSE-2.0
-  Unless required by applicable law or agreed to in writing, software
-  distributed under the License is distributed on an "AS IS" BASIS,
-  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-  See the License for the specific language governing permissions and
-  limitations under the License.
 -->
 <script type="text/javascript">
-    RED.nodes.registerType('onvif-events',{
-        category: 'OnVif',
-        color: '#ff758d',
-        defaults: {
-            name: {value:""},
-            deviceConfig: {value:"", type: "onvif-config"},
-            action: {value:"", required: false}
-        },          
-        inputs:1,
-        outputs:1,
-        icon: "event.png",
-        label: function() {
-            return this.name||"OnVif events";
-        },
-        oneditsave: function() {
-            // Reset all values when no action has been specified 
-            // (because then no fields will be visible to specify data)
-            if ($("#node-input-action").val() === "") {
-                // No fields yet ...
-            }
+RED.nodes.registerType('onvif-events', {
+    category: 'ONVIF',
+    color: '#ff758d',
+
+    defaults: {
+        name: { value: "" },
+        deviceConfig: { value: "", type: "onvif-config", required: true },
+        action: { value: "" }
+    },
+
+    inputs: 1,
+    outputs: 1,
+    icon: "event.png",
+
+    label: function () {
+        return this.name || "ONVIF Events";
+    },
+
+    oneditprepare: function () {
+        // Nothing dynamic yet, but hook left intentionally
+    },
+
+    oneditsave: function () {
+        if ($("#node-input-action").val() === "") {
+            // Action may be supplied via msg.action
         }
-    });
+    }
+});
 </script>
 
 <script type="text/x-red" data-template-name="onvif-events">
     <div class="form-row">
-        <label for="node-input-deviceConfig"><i class="fa fa-cog"></i> Device</label>
-        <!-- Node-Red will replace this input element by a drop-down (with available OnVif device configurations) -->
+        <label for="node-input-deviceConfig">
+            <i class="fa fa-cog"></i> Device
+        </label>
         <input type="text" id="node-input-deviceConfig">
     </div>
-    <br>
+
     <div class="form-row">
-        <label for="node-input-action"><i class="fa fa-wrench"></i> Action</label>
+        <label for="node-input-action">
+            <i class="fa fa-wrench"></i> Action
+        </label>
         <select id="node-input-action">
-            <option value=""></option>
+            <option value="">— set via msg.action —</option>
             <option value="start">Start listening</option>
             <option value="stop">Stop listening</option>
             <option value="getEventProperties">Get event properties</option>
             <option value="getEventServiceCapabilities">Get event service capabilities</option>
+            <option value="reconnect">Reconnect</option>
         </select>
     </div>
-    <br>
+
+    <hr>
+
     <div class="form-row">
-        <label for="node-input-name"><i class="icon-tag"></i> Name</label>
-        <input type="text" id="node-input-name" placeholder="Name">
+        <label for="node-input-name">
+            <i class="fa fa-tag"></i> Name
+        </label>
+        <input type="text" id="node-input-name" placeholder="ONVIF Events">
     </div>
 </script>
 
 <script type="text/x-red" data-help-name="onvif-events">
-    <p>A node to get events an OnVif compatible IP device.</p>
-    <p><strong>Device:</strong><br/>
-    The target OnVif-compliant IP device.</p>
-    <p><strong>Action:</strong><br/>
-    The action that needs to be executed on the target device.  When no action is selected, the action should be specified in the <code>msg.action</code> field of the input message.</p>
+    <p>
+        <strong>ONVIF Events</strong>
+    </p>
+    <p>
+        This node subscribes to and manages ONVIF event services on a compatible
+        IP device.
+    </p>
+    <ul>
+        <li><b>Start listening</b> — opens an event subscription</li>
+        <li><b>Stop listening</b> — closes the subscription</li>
+        <li><b>Get event properties</b> — retrieves supported event topics</li>
+        <li><b>Get service capabilities</b> — retrieves event service capabilities</li>
+    </ul>
+    <p>
+        If no action is selected, the action must be provided in
+        <code>msg.action</code>.
+    </p>
 </script>
-
