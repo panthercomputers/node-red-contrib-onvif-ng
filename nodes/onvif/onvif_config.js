@@ -1,139 +1,83 @@
+/**
+ * Original work:
+ * Copyright 2018 Bart Butenaers
+ *
+ * Modifications:
+ * Copyright 2025 Panther Computers
+ *
+ * Licensed under the Apache License, Version 2.0
+ */
+
 'use strict';
 
+const { Cam } = require('onvif');
+
 module.exports = function (RED) {
-    const onvif = require('onvif');
-
-    const STATUS = {
-        CONNECTED: 'connected',
-        DISCONNECTED: 'disconnected',
-        INITIALIZING: 'initializing',
-        UNCONFIGURED: 'unconfigured'
-    };
-
-    function setStatus(node, status) {
-        node.onvifStatus = status;
-        node.emit('onvif_status', status);
-    }
 
     function OnvifConfigNode(config) {
         RED.nodes.createNode(this, config);
+
         const node = this;
 
-        node.name = config.name;
         node.xaddress = config.xaddress;
-        node.port = Number(config.port || 80);
-        node.timeout = Number(config.timeout || 3);
-        node.checkConnectionInterval = Number(config.checkConnectionInterval || 5);
+        node.port = config.port || 80;
+        node.secure = config.secure || false;
 
-        node.cam = null;
-        node.onvifStatus = STATUS.UNCONFIGURED;
-        node._initializing = false;
-        node._checking = false;
-        node._timer = null;
+        // Device fingerprint (used for portability & safety)
+        node.deviceKey = `${node.xaddress}:${node.port}`;
 
-        node.setMaxListeners(50);
+        // ---- Portable authentication resolution ----
+        const envKey = node.xaddress
+            ? node.xaddress.replace(/\./g, '_')
+            : null;
 
-        /* --------------------------------------------------
-         * Initialize camera connection
-         * -------------------------------------------------- */
-        node.initialize = function () {
-            if (node.cam || node._initializing) return;
+        node.user =
+            node.credentials?.user ||
+            (envKey && process.env[`ONVIF_CAM_${envKey}_USER`]) ||
+            process.env.ONVIF_USER ||
+            null;
 
-            if (!node.xaddress) {
-                setStatus(node, STATUS.UNCONFIGURED);
-                return;
-            }
+        node.password =
+            node.credentials?.password ||
+            (envKey && process.env[`ONVIF_CAM_${envKey}_PASS`]) ||
+            process.env.ONVIF_PASS ||
+            null;
 
-            node._initializing = true;
-            setStatus(node, STATUS.INITIALIZING);
+        // Fail fast if credentials are missing
+        if (!node.user || !node.password) {
+            node.warn(
+                `ONVIF credentials missing for ${node.deviceKey}. ` +
+                `Set credentials in config node or environment variables.`
+            );
+            return;
+        }
 
-            const options = {
+        // ---- Create ONVIF camera instance ----
+        try {
+            node.cam = new Cam({
                 hostname: node.xaddress,
                 port: node.port,
-                timeout: node.timeout * 1000
-            };
-
-            if (node.credentials?.user) {
-                options.username = node.credentials.user;
-                options.password = node.credentials.password;
-            }
-
-            node.cam = new onvif.Cam(options, function (err) {
-                node._initializing = false;
-
+                username: node.user,
+                password: node.password,
+                secure: node.secure,
+                timeout: 8000
+            }, function (err) {
                 if (err) {
-                    node.error(err);
-                    node.cam = null;
-                    setStatus(node, STATUS.DISCONNECTED);
-                    return;
+                    node.onvifStatus = 'error';
+                    node.error(`ONVIF connection failed: ${err.message || err}`);
+                } else {
+                    node.onvifStatus = 'connected';
+                    node.log(`ONVIF connected: ${node.deviceKey}`);
                 }
-
-                setStatus(node, STATUS.CONNECTED);
             });
-
-            if (node.checkConnectionInterval > 0) {
-                node._timer = setInterval(() => {
-                    if (!node.cam || node._checking) return;
-
-                    node._checking = true;
-                    node.cam.getSystemDateAndTime((err) => {
-                        node._checking = false;
-
-                        if (err) {
-                            setStatus(node, STATUS.DISCONNECTED);
-                        } else {
-                            setStatus(node, STATUS.CONNECTED);
-                        }
-                    });
-                }, node.checkConnectionInterval * 1000);
-            }
-        };
-
-        /* --------------------------------------------------
-         * Profiles helper (editor UI)
-         * -------------------------------------------------- */
-        node.getProfiles = function (clientConfig, res) {
-            const creds = node.credentials || {};
-
-            const cfg = {
-                hostname: clientConfig.hostname || node.xaddress,
-                port: clientConfig.port || node.port,
-                username: clientConfig.user || creds.user,
-                password: clientConfig.password || creds.password,
-                timeout: node.timeout * 1000
-            };
-
-            if (cfg.password && creds.password) {
-                cfg.password = cfg.password.replace('___PWRD__', creds.password);
-            }
-
-            new onvif.Cam(cfg, function (err) {
-                if (err || !this.profiles) {
-                    res.json([]);
-                    return;
-                }
-
-                res.json(
-                    this.profiles.map(p => ({
-                        label: p.name,
-                        value: p.$.token
-                    }))
-                );
-            });
-        };
-
-        /* --------------------------------------------------
-         * Startup / shutdown
-         * -------------------------------------------------- */
-        node.initialize();
+        } catch (err) {
+            node.onvifStatus = 'error';
+            node.error(`ONVIF init exception: ${err.message}`);
+        }
 
         node.on('close', function () {
-            if (node._timer) {
-                clearInterval(node._timer);
-                node._timer = null;
-            }
             node.cam = null;
-            setStatus(node, '');
+            node.onvifStatus = 'disconnected';
         });
     }
 
@@ -143,25 +87,4 @@ module.exports = function (RED) {
             password: { type: 'password' }
         }
     });
-
-    /* --------------------------------------------------
-     * Editor HTTP endpoint
-     * -------------------------------------------------- */
-    RED.httpAdmin.get(
-        '/onvifdevice/:cmd/:id',
-        RED.auth.needsPermission('onvifdevice.read'),
-        function (req, res) {
-            const node = RED.nodes.getNode(req.params.id);
-            if (!node) {
-                res.status(404).json([]);
-                return;
-            }
-
-            if (req.params.cmd === 'profiles') {
-                node.getProfiles(req.query, res);
-            } else {
-                res.status(400).json([]);
-            }
-        }
-    );
 };
