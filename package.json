@@ -15,6 +15,9 @@
     "type": "git",
     "url": "https://github.com/panthercomputers/node-red-contrib-onvif-2026.git"
   },
+  "files": [
+          "nodes/*"
+    ],
   "dependencies": {
     "onvif": "^0.6.4"
   },
