@@ -1,52 +1,31 @@
 {
   "name": "node-red-contrib-onvif-2026",
-  "version": "0.1.0",
-  "description": "Node Red nodes for communicating with OnVif compliant IP devices",
-
-  "engines": {
-    "node": ">=18",
-    "node-red": ">=3.0.0"
-  },
-
-  "dependencies": {
-    "onvif": "^0.6.5",
-    "node-fetch": "^3.3.2"
-  },
-
-  "author": {
-    "name": "Panther Computers"
-  },
-  "license": "Apache-2.0",
+  "version": "1.0.0",
+  "description": "ONVIF nodes for Node-RED (modernized)",
   "keywords": [
+    "node-red",
     "onvif",
-    "ip",
     "camera",
-    "snapshot",
     "ptz",
-    "rtsp",
-    "stream",
-    "surveillance"
+    "ip-camera"
   ],
-  "bugs": {
-    "url": "https://github.com/bartbutenaers/node-red-contrib-onvif-2026/issues"
-  },
-  "homepage": "https://github.com/bartbutenaers/node-red-contrib-onvif-2026",
+  "license": "Apache-2.0",
+  "author": "Panther Computers",
   "repository": {
     "type": "git",
-    "url": "https://github.com/bartbutenaers/node-red-contrib-onvif-2026.git"
+    "url": "https://github.com/panthercomputers/node-red-contrib-onvif-2026.git"
   },
-
- "node-red": {
-  "nodes": {
-    "onvif-config": "nodes/onvif/onvif_config.js",
-    "onvif-device": "nodes/onvif/onvif_device.js",
-    "onvif-events": "nodes/onvif/onvif_events.js",
-    "onvif-ptz": "nodes/onvif/onvif_ptz.js",
-    "onvif-media": "nodes/onvif/onvif_media.js",
-    "onvif-imaging": "nodes/onvif/onvif_imaging.js",
-    "onvif-discovery": "nodes/onvif/onvif_discovery.js",
-    "onvif-recordings": "nodes/onvif/onvif_recordings.js"
+  "dependencies": {
+    "onvif": "^0.6.4"
+  },
+  "node-red": {
+    "nodes": {
+      "onvif-config": "nodes/onvif/onvif_config.js",
+      "onvif-discovery": "nodes/onvif/onvif_discovery.js",
+      "onvif-events": "nodes/onvif/onvif_events.js",
+      "onvif-imaging": "nodes/onvif/onvif_imaging.js",
+      "onvif-ptz": "nodes/onvif/onvif_ptz.js",
+      "onvif-recordings": "nodes/onvif/onvif_recordings.js"
+    }
   }
-}
-
 }
