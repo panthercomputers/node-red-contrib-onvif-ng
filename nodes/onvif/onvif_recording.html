@@ -1,32 +1,44 @@
 <script type="text/javascript">
-RED.nodes.registerType('onvif-recording',{
-    category: 'OnVIf',
+RED.nodes.registerType('onvif-recordings',{
+    category: 'OnVif',
     color: '#ff758d',
     defaults: {
         name: {value:""},
-        deviceConfig: {value:"", type:"onvif-config"}
+        deviceConfig: {value:"", type:"onvif-config"},
+        action: {value:""}
     },
     inputs:1,
     outputs:1,
-    icon:"recording.png",
+    icon: "recordings.png",
     label: function() {
-        return this.name || "OnVIf recording";
+        return this.name || "OnVif recordings";
     }
 });
 </script>
 
-<script type="text/x-red" data-template-name="onvif-recording">
+<script type="text/x-red" data-template-name="onvif-recordings">
     <div class="form-row">
-        <label>Device</label>
+        <label for="node-input-deviceConfig">
+            <i class="fa fa-cog"></i> Device
+        </label>
         <input type="text" id="node-input-deviceConfig">
     </div>
 
     <div class="form-row">
-        <label>Name</label>
+        <label for="node-input-action">
+            <i class="fa fa-wrench"></i> Action
+        </label>
+        <input type="text" id="node-input-action">
+    </div>
+
+    <div class="form-row">
+        <label for="node-input-name">
+            <i class="icon-tag"></i> Name
+        </label>
         <input type="text" id="node-input-name">
     </div>
 </script>
 
-<script type="text/x-red" data-help-name="onvif-recording">
-<p>Access ONVIF recording services (get recordings).</p>
+<script type="text/x-red" data-help-name="onvif-recordings">
+    <p>ONVIF recordings service node.</p>
 </script>
