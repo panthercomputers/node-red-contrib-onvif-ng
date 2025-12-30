@@ -5,122 +5,99 @@
  * Modifications:
  * Copyright 2025 Panther Computers
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+ * Licensed under the Apache License, Version 2.0
  */
 
 module.exports = function (RED) {
-    const onvif = require('onvif');
-    const utils = require('./utils');
+    const onvifCall = require('./onvif/onvifCall');
+    const utils = require('./onvif/utils');
 
     function OnVifImagingNode(config) {
         RED.nodes.createNode(this, config);
         const node = this;
 
         node.action = config.action;
-        node.videoSourceToken = config.videoSourceToken;
+        node.profileToken = config.profileToken;
+        node.profileName = config.profileName;
 
         node.deviceConfig = RED.nodes.getNode(config.deviceConfig);
 
         if (node.deviceConfig) {
-            node.listener = (status) => {
+            node.listener = status =>
                 utils.setNodeStatus(node, 'imaging', status);
-            };
 
             node.deviceConfig.addListener('onvif_status', node.listener);
             utils.setNodeStatus(node, 'imaging', node.deviceConfig.onvifStatus);
             node.deviceConfig.initialize();
         }
 
-        node.on('input', function (msg) {
+        node.on('input', msg => {
             const action = node.action || msg.action;
-
             if (!action) {
                 node.error('No action specified');
                 return;
             }
 
-            if (action !== 'reconnect') {
-                if (!node.deviceConfig || node.deviceConfig.onvifStatus !== 'connected') {
-                    node.error('Not connected to device');
-                    return;
-                }
-
-                if (!utils.hasService(node.deviceConfig.cam, 'imaging')) {
-                    node.error('Imaging service not supported by device');
-                    return;
-                }
+            if (!node.deviceConfig || node.deviceConfig.onvifStatus !== 'connected') {
+                node.error('Not connected to device');
+                return;
             }
 
-            const videoSourceToken =
-                node.videoSourceToken ||
-                msg.videoSourceToken ||
-                node.deviceConfig?.videoSourceToken;
+            if (!utils.hasService(node.deviceConfig.cam, 'imaging')) {
+                node.error('Imaging service not supported');
+                return;
+            }
+
+            const profileToken =
+                node.profileToken ||
+                msg.profileToken ||
+                (node.profileName
+                    ? node.deviceConfig.getProfileTokenByName(node.profileName)
+                    : undefined);
+
+            if (!profileToken) {
+                node.error('Missing profileToken');
+                return;
+            }
 
             const newMsg = {
+                ...msg,
                 action,
-                xaddr: node.deviceConfig?.xaddress
+                xaddr: node.deviceConfig.xaddress
             };
 
-            try {
-                switch (action) {
-                    case 'getImagingSettings':
-                        node.deviceConfig.cam.getImagingSettings(
-                            { videoSourceToken },
-                            (err, settings, xml) =>
-                                utils.handleResult(node, err, settings, xml, newMsg)
-                        );
-                        break;
+            switch (action) {
 
-                    case 'setImagingSettings':
-                        if (!msg.settings) {
-                            node.error('msg.settings is required');
-                            return;
-                        }
+                case 'getSettings':
+                    onvifCall(node, {
+                        service: 'imaging',
+                        method: 'getImagingSettings',
+                        args: [profileToken],
+                        msg: newMsg
+                    });
+                    break;
 
-                        node.deviceConfig.cam.setImagingSettings(
-                            {
-                                videoSourceToken,
-                                imagingSettings: msg.settings,
-                                forcePersistence: true
-                            },
-                            (err, result, xml) =>
-                                utils.handleResult(node, err, result, xml, newMsg)
-                        );
-                        break;
+                case 'setSettings':
+                    if (!msg.settings) {
+                        node.error('Missing msg.settings');
+                        return;
+                    }
+                    onvifCall(node, {
+                        service: 'imaging',
+                        method: 'setImagingSettings',
+                        args: [profileToken, msg.settings, true],
+                        msg: newMsg
+                    });
+                    break;
 
-                    case 'getOptions':
-                        node.deviceConfig.cam.getOptions(
-                            { videoSourceToken },
-                            (err, options, xml) =>
-                                utils.handleResult(node, err, options, xml, newMsg)
-                        );
-                        break;
-
-                    case 'reconnect':
-                        node.deviceConfig.cam.connect();
-                        break;
-
-                    default:
-                        node.error(`Unsupported action: ${action}`);
-                }
-            } catch (err) {
-                node.error(`Action failed: ${err.message}`);
+                default:
+                    node.error(`Unsupported action: ${action}`);
             }
         });
 
-        node.on('close', function () {
+        node.on('close', () => {
             if (node.listener) {
-                node.deviceConfig?.removeListener('onvif_status', node.listener);
+                node.deviceConfig.removeListener('onvif_status', node.listener);
             }
         });
     }
