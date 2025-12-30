@@ -1,240 +1,228 @@
 <!--
-  Copyright 2018, Bart Butenaers
+  Original work:
+  Copyright 2018 Bart Butenaers
+
+  Modifications:
+  Copyright 2025 Panther Computers
+
   Licensed under the Apache License, Version 2.0 (the "License");
-  you may not use this file except in compliance with the License.
-  You may obtain a copy of the License at
-  http://www.apache.org/licenses/LICENSE-2.0
-  Unless required by applicable law or agreed to in writing, software
-  distributed under the License is distributed on an "AS IS" BASIS,
-  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-  See the License for the specific language governing permissions and
-  limitations under the License.
 -->
 <script type="text/javascript">
-    RED.nodes.registerType('onvif-media',{
-        category: 'OnVif',
-        color: '#ff758d',
-        defaults: {
-            name: {value:""},
-            deviceConfig: {value:"", type: "onvif-config"},
-            profileToken: {value:"", required:false},
-            profileName: {value:"", required:false},
-            videoEncoderConfigToken: {value:"", required:false},
-            videoEncoderConfigName: {value:"", required:false},
-            videoEncoderConfigEncoding: {value:"", required:false},
-            action: {value:"", required: false},
-            protocol: {value:""},
-            stream: {value:"RTP-Unicast"}
-        },          
-        inputs:1,
-        outputs:1,
-        icon: "media.png",
-        label: function() {
-            return this.name||"OnVif media";
-        },
-        oneditprepare: function() { 
-            var node = this;
-        
-            try {
-                $("#node-input-profileName").autocomplete( "destroy" );
-            } 
-            catch(err) {
+RED.nodes.registerType('onvif-media', {
+    category: 'ONVIF',
+    color: '#ff758d',
+
+    defaults: {
+        name: { value: "" },
+        deviceConfig: { value: "", type: "onvif-config", required: true },
+
+        action: { value: "" },
+
+        profileToken: { value: "" },
+        profileName: { value: "" },
+
+        videoEncoderConfigToken: { value: "" },
+        videoEncoderConfigName: { value: "" },
+        videoEncoderConfigEncoding: { value: "" },
+
+        protocol: { value: "" },
+        stream: { value: "RTP-Unicast" }
+    },
+
+    inputs: 1,
+    outputs: 1,
+    icon: "media.png",
+
+    label: function () {
+        return this.name || "ONVIF Media";
+    },
+
+    oneditprepare: function () {
+        const node = this;
+
+        $(".actionParam-row").hide();
+
+        $("#node-input-action").on("change", function () {
+            const action = $(this).val();
+            $(".actionParam-row").hide();
+
+            switch (action) {
+                case "getStreamUri":
+                    $("#profileName-row").show();
+                    $("#protocol-row").show();
+                    $("#stream-row").show();
+                    break;
+
+                case "getSnapshotUri":
+                case "getSnapshot":
+                case "deleteProfile":
+                    $("#profileName-row").show();
+                    break;
+
+                case "getOSDs":
+                case "getVideoEncoderConfiguration":
+                case "getVideoEncoderConfigurationOptions":
+                    $("#videoEncoderConfigToken-row").show();
+                    break;
+
+                case "createProfile":
+                    $("#profileToken-row").show();
+                    $("#profileName-row").show();
+                    break;
             }
-            $("#node-input-profileName-search").click(function() {
-                $("#node-input-profileName-search").addClass('disabled');
-                
-                var configNodeId = $("#node-input-deviceConfig").val();
-                
-                if (!configNodeId) {
-                    // No config node has been specified, so no use to connect to the server ...
-                    return;
-                }
-                                
-                configNode = RED.nodes.node(configNodeId);
-             
-                // All client-side config data should be send to the server (since we don't know if it is dirty or not).
-                var configData = {};
-                configData.hostname = configNode.xaddress;
-                if (configNode.credentials) {
-                    configData.user = configNode.credentials.user;
-                    configData.password = configNode.credentials.password;
-                }
-                
-                $.getJSON("onvifdevice/profiles/" + configNodeId, configData, function(profiles) {
-                    $("#node-input-profileName-search").removeClass('disabled');
+        });
+
+        // Profile lookup
+        $("#node-input-profileName-search").on("click", function () {
+            const configNodeId = $("#node-input-deviceConfig").val();
+            if (!configNodeId) {
+                return;
+            }
+
+            const configNode = RED.nodes.node(configNodeId);
+            if (!configNode) {
+                return;
+            }
+
+            const configData = {
+                hostname: configNode.xaddress
+            };
+
+            if (configNode.credentials) {
+                configData.user = configNode.credentials.user;
+                configData.password = configNode.credentials.password;
+            }
+
+            $(this).addClass("disabled");
+
+            $.getJSON("onvifdevice/profiles/" + configNodeId, configData)
+                .done(function (profiles) {
                     $("#node-input-profileName").autocomplete({
-                        source:profiles,
-                        minLength:0,
-                        select: function(event, ui) {
-                            // Make sure the label is displayed in the text field (instead of the value)
+                        source: profiles,
+                        minLength: 0,
+                        select: function (event, ui) {
                             event.preventDefault();
                             $("#node-input-profileName").val(ui.item.label);
                         },
-                        focus: function(event, ui) {
-                            // Make sure the label is displayed when hovering (instead of the value)
+                        focus: function (event, ui) {
                             event.preventDefault();
                             $("#node-input-profileName").val(ui.item.label);
-                        },
-                        close: function( event, ui ) {
-                            $("#node-input-profileName").autocomplete( "close" );
                         }
-                    }).autocomplete("search","");
+                    }).autocomplete("search", "");
+                })
+                .always(function () {
+                    $("#node-input-profileName-search").removeClass("disabled");
                 });
-            });
-            
-            // When the 'action' combobox value changes, only the corresponding field(s) parameter fields should be displayed
-            $("#node-input-action").change(function() {
-                var action = $("#node-input-action").val();
-                
-                // Hide all rows concerning the action parameters, and show some of these again below
-                $(".actionParam-row").hide();
-                
-                // Depending on the selected action, some specific element(s) should be showed
-                switch (action) {
-                    case "getStreamUri":
-                        $("#profileName-div").show();
-                        $("#protocol-div").show();
-                        $("#stream-div").show();
-                        break;
-                    case "getSnapshotUri":
-                        $("#profileName-div").show();
-                        break;
-                    case "getSnapshot":
-                        $("#profileName-div").show();
-                        break;
-                    case "getOSDs":  
-                        $("#videoEncoderConfigToken-div").show();
-                        break;
-                    case "getVideoEncoderConfigurationOptions":
-                        $("#videoEncoderConfigToken-div").show();
-                        break;
-                    case "getVideoEncoderConfiguration":
-                        $("#videoEncoderConfigToken-div").show();
-                        break;
-                    case "createProfile":
-                        $("#profileToken-div").show();
-                        $("#profileName-div").show();
-                        break;
-                    case "deleteProfile":
-                        $("#profileName-div").show();
-                        break;
-                    case "setVideoEncoderConfiguration":
-                        $("#videoEncoderConfigToken-div").show();
-                        $("#videoEncoderConfigName-div").show();
-                        $("#videoEncoderConfigEncoding-div").show();
-                        
-                        // TODO display all the required fields
-                        break;
-                }                     
-            });
-        },
-        oneditsave: function() {
-            // Reset all values when no action has been specified 
-            // (because then no fields will be visible to specify data)
-            if ($("#node-input-action").val() === "") {
-                $("#node-input-profileToken").val("");
-                $("#node-input-profileName").val("");
-                $("#node-input-videoEncoderConfigToken").val("");
-                $("#node-input-videoEncoderConfigName").val("");
-                $("#node-input-videoEncoderConfigEncoding").val("");
-                $("#node-input-protocol").val("");
-                $("#node-input-stream").val("");
-            }
+        });
+    },
+
+    oneditsave: function () {
+        if ($("#node-input-action").val() === "") {
+            $("#node-input-profileToken").val("");
+            $("#node-input-profileName").val("");
+            $("#node-input-videoEncoderConfigToken").val("");
+            $("#node-input-videoEncoderConfigName").val("");
+            $("#node-input-videoEncoderConfigEncoding").val("");
+            $("#node-input-protocol").val("");
+            $("#node-input-stream").val("");
         }
-    });
+    }
+});
 </script>
 
 <script type="text/x-red" data-template-name="onvif-media">
     <div class="form-row">
-        <label for="node-input-deviceConfig"><i class="fa fa-cog"></i> Device</label>
-        <!-- Node-Red will replace this input element by a drop-down (with available OnVif device configurations) -->
+        <label for="node-input-deviceConfig">
+            <i class="fa fa-cog"></i> Device
+        </label>
         <input type="text" id="node-input-deviceConfig">
     </div>
-    <br>
+
     <div class="form-row">
-        <label for="node-input-action"><i class="fa fa-wrench"></i> Action</label>
+        <label for="node-input-action">
+            <i class="fa fa-wrench"></i> Action
+        </label>
         <select id="node-input-action">
-            <option value=""></option>
-            <option value="getStreamUri">Get stream URL</option>
-            <option value="getVideoEncoderConfiguration">Get video encoder configuration</option> 
-            <option value="getVideoEncoderConfigurations">Get video encoder configurations</option>    
-            <option value="getVideoEncoderConfigurationOptions">Get video encoder configuration options</option>             
+            <option value="">— set via msg.action —</option>
+            <option value="getStreamUri">Get stream URI</option>
             <option value="getProfiles">Get profiles</option>
-            <option value="getVideoSources">Get video sources</option>
-            <option value="getVideoSourceConfigurations">Get video source configurations</option>
-            <option value="getMetadataConfigurations">Get meta data configurations</option>
-            <option value="getAudioSources">Get audio sources</option>
-            <option value="getAudioSourceConfigurations">Get audio source configurations</option>
-            <option value="getAudioEncoderConfigurations">Get audio encoder configurations</option>
-            <option value="getAudioOutputs">Get audio outputs</option>  
-            <option value="getAudioOutputConfigurations">Get audio output configurations</option>  
-            <option value="getSnapshotUri">Get snapshot URI</option> 
-            <option value="getSnapshot">Get snapshot image</option>           
-            <option value="getOSDs">Get OSD's</option>    
-            <option value="createProfile">Create profile</option>  
-            <option value="deleteProfile">Delete profile</option>  
-            <option value="reconnect">Reconnect to device</option>
-            <!--  TODO <option value="setVideoEncoderConfiguration">Set video encoder configuration</option>    -->          
+            <option value="getSnapshotUri">Get snapshot URI</option>
+            <option value="getSnapshot">Get snapshot</option>
+            <option value="getOSDs">Get OSDs</option>
+            <option value="getVideoEncoderConfiguration">Get video encoder configuration</option>
+            <option value="getVideoEncoderConfigurationOptions">Get video encoder configuration options</option>
+            <option value="createProfile">Create profile</option>
+            <option value="deleteProfile">Delete profile</option>
+            <option value="reconnect">Reconnect</option>
         </select>
     </div>
-    <div class="form-row actionParam-row" id="profileName-div">
-        <label for="node-input-profileName"><i class="fa fa-random"></i> Profile</label>
+
+    <div class="form-row actionParam-row" id="profileToken-row">
+        <label for="node-input-profileToken">
+            <i class="fa fa-hashtag"></i> Profile token
+        </label>
+        <input type="text" id="node-input-profileToken">
+    </div>
+
+    <div class="form-row actionParam-row" id="profileName-row">
+        <label for="node-input-profileName">
+            <i class="fa fa-random"></i> Profile
+        </label>
         <input type="text" id="node-input-profileName" style="width:66%;">
-        <a id="node-input-profileName-search" class="btn"><i id="node-config-lookup-serial-icon" class="fa fa-search"></i></a>
+        <a id="node-input-profileName-search" class="btn">
+            <i class="fa fa-search"></i>
+        </a>
     </div>
-    <div class="form-row actionParam-row" id="profileName-div">
-        <label for="node-input-profileName"><i class="fa fa-hashtag"></i> Profile name</label>
-        <input type="text" id="node-input-profileName">
-    </div>
-    <div class="form-row actionParam-row" id="videoEncoderConfigToken-div">
-        <label for="node-input-videoEncoderConfigToken"><i class="fa fa-hashtag"></i> Config token</label>
+
+    <div class="form-row actionParam-row" id="videoEncoderConfigToken-row">
+        <label for="node-input-videoEncoderConfigToken">
+            <i class="fa fa-hashtag"></i> Config token
+        </label>
         <input type="text" id="node-input-videoEncoderConfigToken">
     </div>
-    <!--  TODO add extra elements for action setVideoEncoderConfiguration   -->
-    <div class="form-row actionParam-row" id="videoEncoderConfigName-div">
-        <label for="node-input-videoEncoderConfigName"><i class="fa fa-comment"></i> Config name</label>
-        <input type="text" id="node-input-videoEncoderConfigName">
-    </div>
-    <div class="form-row actionParam-row" id="videoEncoderConfigEncoding-div">
-        <label for="node-input-videoEncoderConfigEncoding"><i class="fa fa-film"></i> Config encoding</label>
-        <select id="node-input-videoEncoderConfigEncoding">
-            <option value=""></option>
-            <option value="JPEG">JPEG</option>
-            <option value="H264">H264</option> 
-            <option value="MPEG4">MPEG4</option>                
-        </select>
-    </div>
-    <div class="form-row actionParam-row" id="protocol-div">
-        <label for="node-input-protocol"><i class="fa fa-exchange-alt"></i> Protocol</label>
+
+    <div class="form-row actionParam-row" id="protocol-row">
+        <label for="node-input-protocol">
+            <i class="fa fa-exchange-alt"></i> Protocol
+        </label>
         <select id="node-input-protocol">
             <option value=""></option>
             <option value="HTTP">HTTP</option>
             <option value="UDP">UDP</option>
-            <option value="RTSP">RTSP</option>            
+            <option value="RTSP">RTSP</option>
         </select>
     </div>
-    <div class="form-row actionParam-row" id="stream-div">
-        <label for="node-input-stream"><i class="fa fa-code-branch"></i> RTP stream</label>
+
+    <div class="form-row actionParam-row" id="stream-row">
+        <label for="node-input-stream">
+            <i class="fa fa-code-branch"></i> RTP stream
+        </label>
         <select id="node-input-stream">
-            <option value=""></option>
             <option value="RTP-Unicast">Unicast</option>
-            <option value="RTP-Multicast">Multicast</option>           
+            <option value="RTP-Multicast">Multicast</option>
         </select>
     </div>
-    <br>
+
+    <hr>
+
     <div class="form-row">
-        <label for="node-input-name"><i class="icon-tag"></i> Name</label>
-        <input type="text" id="node-input-name" placeholder="Name">
+        <label for="node-input-name">
+            <i class="fa fa-tag"></i> Name
+        </label>
+        <input type="text" id="node-input-name" placeholder="ONVIF Media">
     </div>
 </script>
 
 <script type="text/x-red" data-help-name="onvif-media">
-    <p>A node to get extra information about an OnVif media service.</p>
-    <p><strong>Device:</strong><br/>
-    The target OnVif-compliant IP device.</p>
-    <p><strong>Profile:</strong><br/>
-    The token of the required profile on the target IP device.  The URLs are specified in each profile.</p>
-    <p><strong>Action:</strong><br/>
-    The action that needs to be executed on the target device.  When no action is selected, the action should be specified in the <code>msg.action</code> field of the input message.</p>
+    <p>
+        <strong>ONVIF Media</strong>
+    </p>
+    <p>
+        Executes media-related ONVIF operations such as retrieving stream URIs,
+        profiles, snapshots, and encoder configuration details.
+    </p>
+    <p>
+        If no action is selected, the action must be provided in
+        <code>msg.action</code>.
+    </p>
 </script>
-
