@@ -11,37 +11,21 @@
 
   http://www.apache.org/licenses/LICENSE-2.0
 -->
+
 <script type="text/javascript">
 RED.nodes.registerType('onvif-config', {
     category: 'config',
-    color: '#ff758d',
-
     defaults: {
-        xaddress: { value: "", required: true },
-        port: { value: 80, required: true, validate: RED.validators.number() },
-        timeout: { value: 30, required: true, validate: RED.validators.number() },
-        checkConnectionInterval: { value: 5, validate: RED.validators.number() },
-        name: { value: "" }
+        xaddress: { value: '', required: true },
+        port: { value: 80 },
+        secure: { value: false }
     },
-
     credentials: {
-        user: { type: "text" },
-        password: { type: "password" }
+        user: { type: 'text' },
+        password: { type: 'password' }
     },
-
     label: function () {
-        return this.name || this.xaddress || "ONVIF Device";
-    },
-
-    oneditprepare: function () {
-        // Backward compatibility for older nodes
-        if (this.timeout === undefined) {
-            $("#node-config-input-timeout").val(30);
-        }
-
-        if (this.checkConnectionInterval === undefined) {
-            $("#node-config-input-checkConnectionInterval").val(5);
-        }
+        return this.xaddress || 'ONVIF Device';
     }
 });
 </script>
@@ -49,97 +33,59 @@ RED.nodes.registerType('onvif-config', {
 <script type="text/x-red" data-template-name="onvif-config">
     <div class="form-row">
         <label for="node-config-input-xaddress">
-            <i class="fa fa-globe"></i> IP address / Hostname
+            <i class="fa fa-globe"></i> Camera Address
         </label>
-        <input type="text" id="node-config-input-xaddress" placeholder="192.168.1.100">
+        <input type="text" id="node-config-input-xaddress" placeholder="192.168.1.50">
     </div>
 
     <div class="form-row">
         <label for="node-config-input-port">
-            <i class="fa fa-random"></i> Port
+            <i class="fa fa-plug"></i> Port
         </label>
-        <input type="number" id="node-config-input-port" min="1" max="65535">
+        <input type="number" id="node-config-input-port" style="width:80px;">
     </div>
 
     <div class="form-row">
-        <label for="node-config-input-user">
-            <i class="fa fa-user"></i> Username
+        <label for="node-config-input-secure">
+            <i class="fa fa-lock"></i> Secure (HTTPS)
         </label>
-        <input type="text" id="node-config-input-user" autocomplete="username">
-    </div>
-
-    <div class="form-row">
-        <label for="node-config-input-password">
-            <i class="fa fa-lock"></i> Password
-        </label>
-        <input type="password" id="node-config-input-password" autocomplete="current-password">
-    </div>
-
-    <div class="form-row">
-        <label for="node-config-input-timeout">
-            <i class="fa fa-clock-o"></i> Timeout (seconds)
-        </label>
-        <input type="number" id="node-config-input-timeout" min="1">
-    </div>
-
-    <div class="form-row">
-        <label for="node-config-input-checkConnectionInterval">
-            <i class="fa fa-refresh"></i> Refresh interval (seconds)
-        </label>
-        <input type="number"
-               id="node-config-input-checkConnectionInterval"
-               min="0"
-               style="width: 80px;">
-        <span style="margin-left:6px;">(0 = disabled)</span>
+        <input type="checkbox" id="node-config-input-secure" style="width:auto;">
     </div>
 
     <hr>
 
     <div class="form-row">
-        <label for="node-config-input-name">
-            <i class="fa fa-tag"></i> Name
+        <label for="node-config-input-user">
+            <i class="fa fa-user"></i> Username
         </label>
-        <input type="text" id="node-config-input-name" placeholder="Camera Lobby East">
+        <input type="text" id="node-config-input-user" autocomplete="off">
+    </div>
+
+    <div class="form-row">
+        <label for="node-config-input-password">
+            <i class="fa fa-key"></i> Password
+        </label>
+        <input type="password" id="node-config-input-password" autocomplete="new-password">
+    </div>
+
+    <div class="form-tips">
+        <b>Tip:</b> Credentials are encrypted by Node-RED.
+        <br>
+        Optional environment variables:
+        <ul>
+            <li><code>ONVIF_USER</code> / <code>ONVIF_PASS</code></li>
+            <li><code>ONVIF_CAM_&lt;IP&gt;_USER</code></li>
+            <li><code>ONVIF_CAM_&lt;IP&gt;_PASS</code></li>
+        </ul>
     </div>
 </script>
 
 <script type="text/x-red" data-help-name="onvif-config">
     <p>
-        <strong>ONVIF Device Configuration</strong>
+        Defines a reusable ONVIF camera connection.
+        Credentials are stored securely and are not exported with flows.
     </p>
-
     <p>
-        This configuration node stores connection details for an ONVIF-compatible
-        camera or encoder. Multiple ONVIF nodes can share the same configuration.
-    </p>
-
-    <p>
-        <strong>IP address / Hostname</strong><br>
-        The IP address or DNS hostname of the ONVIF device. You can discover this
-        automatically using the <em>ONVIF Discovery</em> node.
-    </p>
-
-    <p>
-        <strong>Port</strong><br>
-        The ONVIF service port. This is commonly <code>80</code>, <code>8000</code>,
-        or <code>8899</code>, depending on the manufacturer.
-    </p>
-
-    <p>
-        <strong>Username / Password</strong><br>
-        Credentials used for ONVIF authentication. These are stored securely using
-        Node-RED credentials and are not exported in flows.
-    </p>
-
-    <p>
-        <strong>Timeout</strong><br>
-        Maximum time (in seconds) to wait for a response from the device before
-        considering it disconnected.
-    </p>
-
-    <p>
-        <strong>Refresh interval</strong><br>
-        How often the node checks the device connection status. Set to
-        <code>0</code> to disable automatic checks.
+        Environment variables may be used to enable portable deployments.
     </p>
 </script>
