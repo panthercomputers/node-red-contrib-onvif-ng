@@ -79,6 +79,10 @@ RED.nodes.registerType('onvif-device', {
 
     <p>
         This node interacts with the ONVIF Device service only (device metadata, capabilities, reboot).
+  <ul>
+    <li>This node is read-only / control-plane</li>
+    <li>Explicitly state that it does NOT stream media</li>
+</ul>
     </p>
 
     <p>
@@ -103,5 +107,6 @@ RED.nodes.registerType('onvif-device', {
         </ul>
     </p>
 </script>
+
 
 
