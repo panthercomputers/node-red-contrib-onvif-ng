@@ -5,27 +5,25 @@
   Modifications:
   Copyright 2025 Panther Computers
 
-  Licensed under the Apache License, Version 2.0 (the "License");
+  Licensed under the Apache License, Version 2.0
 -->
 <script type="text/javascript">
 RED.nodes.registerType('onvif-media', {
-    category: 'ONVIF',
+    category: 'OnVif',
     color: '#ff758d',
 
     defaults: {
         name: { value: "" },
         deviceConfig: { value: "", type: "onvif-config", required: true },
 
-        action: { value: "" },
+        action: { value: "", required: true },
 
         profileToken: { value: "" },
         profileName: { value: "" },
 
         videoEncoderConfigToken: { value: "" },
-        videoEncoderConfigName: { value: "" },
-        videoEncoderConfigEncoding: { value: "" },
 
-        protocol: { value: "" },
+        protocol: { value: "RTSP" },
         stream: { value: "RTP-Unicast" }
     },
 
@@ -38,12 +36,9 @@ RED.nodes.registerType('onvif-media', {
     },
 
     oneditprepare: function () {
-        const node = this;
 
-        $(".actionParam-row").hide();
-
-        $("#node-input-action").on("change", function () {
-            const action = $(this).val();
+        const toggleFields = () => {
+            const action = $("#node-input-action").val();
             $(".actionParam-row").hide();
 
             switch (action) {
@@ -70,80 +65,51 @@ RED.nodes.registerType('onvif-media', {
                     $("#profileName-row").show();
                     break;
             }
-        });
+        };
 
-        // Profile lookup
+        $("#node-input-action").on("change", toggleFields);
+
+        /* ---- Profile lookup ---- */
+        try {
+            $("#node-input-profileName").autocomplete("destroy");
+        } catch(e) {}
+
         $("#node-input-profileName-search").on("click", function () {
             const configNodeId = $("#node-input-deviceConfig").val();
-            if (!configNodeId) {
-                return;
-            }
+            if (!configNodeId) return;
 
-            const configNode = RED.nodes.node(configNodeId);
-            if (!configNode) {
-                return;
-            }
-
-            const configData = {
-                hostname: configNode.xaddress
-            };
-
-            if (configNode.credentials) {
-                configData.user = configNode.credentials.user;
-                configData.password = configNode.credentials.password;
-            }
-
-            $(this).addClass("disabled");
-
-            $.getJSON("onvifdevice/profiles/" + configNodeId, configData)
-                .done(function (profiles) {
-                    $("#node-input-profileName").autocomplete({
-                        source: profiles,
-                        minLength: 0,
-                        select: function (event, ui) {
-                            event.preventDefault();
-                            $("#node-input-profileName").val(ui.item.label);
-                        },
-                        focus: function (event, ui) {
-                            event.preventDefault();
-                            $("#node-input-profileName").val(ui.item.label);
-                        }
-                    }).autocomplete("search", "");
-                })
-                .always(function () {
-                    $("#node-input-profileName-search").removeClass("disabled");
-                });
+            $.getJSON("onvifdevice/profiles/" + configNodeId, function (profiles) {
+                $("#node-input-profileName").autocomplete({
+                    source: profiles,
+                    minLength: 0,
+                    select: function (event, ui) {
+                        event.preventDefault();
+                        $("#node-input-profileName").val(ui.item.label);
+                        $("#node-input-profileToken").val(ui.item.value);
+                    },
+                    focus: function (event, ui) {
+                        event.preventDefault();
+                        $("#node-input-profileName").val(ui.item.label);
+                    }
+                }).autocomplete("search", "");
+            });
         });
-    },
 
-    oneditsave: function () {
-        if ($("#node-input-action").val() === "") {
-            $("#node-input-profileToken").val("");
-            $("#node-input-profileName").val("");
-            $("#node-input-videoEncoderConfigToken").val("");
-            $("#node-input-videoEncoderConfigName").val("");
-            $("#node-input-videoEncoderConfigEncoding").val("");
-            $("#node-input-protocol").val("");
-            $("#node-input-stream").val("");
-        }
+        toggleFields();
     }
 });
 </script>
 
 <script type="text/x-red" data-template-name="onvif-media">
     <div class="form-row">
-        <label for="node-input-deviceConfig">
-            <i class="fa fa-cog"></i> Device
-        </label>
+        <label>Device</label>
         <input type="text" id="node-input-deviceConfig">
     </div>
 
     <div class="form-row">
-        <label for="node-input-action">
-            <i class="fa fa-wrench"></i> Action
-        </label>
+        <label>Action</label>
         <select id="node-input-action">
-            <option value="">— set via msg.action —</option>
+            <option value=""></option>
             <option value="getStreamUri">Get stream URI</option>
             <option value="getProfiles">Get profiles</option>
             <option value="getSnapshotUri">Get snapshot URI</option>
@@ -158,45 +124,34 @@ RED.nodes.registerType('onvif-media', {
     </div>
 
     <div class="form-row actionParam-row" id="profileToken-row">
-        <label for="node-input-profileToken">
-            <i class="fa fa-hashtag"></i> Profile token
-        </label>
+        <label>Profile token</label>
         <input type="text" id="node-input-profileToken">
     </div>
 
     <div class="form-row actionParam-row" id="profileName-row">
-        <label for="node-input-profileName">
-            <i class="fa fa-random"></i> Profile
-        </label>
-        <input type="text" id="node-input-profileName" style="width:66%;">
+        <label>Profile</label>
+        <input type="text" id="node-input-profileName" style="width:65%">
         <a id="node-input-profileName-search" class="btn">
             <i class="fa fa-search"></i>
         </a>
     </div>
 
     <div class="form-row actionParam-row" id="videoEncoderConfigToken-row">
-        <label for="node-input-videoEncoderConfigToken">
-            <i class="fa fa-hashtag"></i> Config token
-        </label>
+        <label>Encoder config token</label>
         <input type="text" id="node-input-videoEncoderConfigToken">
     </div>
 
     <div class="form-row actionParam-row" id="protocol-row">
-        <label for="node-input-protocol">
-            <i class="fa fa-exchange-alt"></i> Protocol
-        </label>
+        <label>Protocol</label>
         <select id="node-input-protocol">
-            <option value=""></option>
+            <option value="RTSP">RTSP</option>
             <option value="HTTP">HTTP</option>
             <option value="UDP">UDP</option>
-            <option value="RTSP">RTSP</option>
         </select>
     </div>
 
     <div class="form-row actionParam-row" id="stream-row">
-        <label for="node-input-stream">
-            <i class="fa fa-code-branch"></i> RTP stream
-        </label>
+        <label>RTP stream</label>
         <select id="node-input-stream">
             <option value="RTP-Unicast">Unicast</option>
             <option value="RTP-Multicast">Multicast</option>
@@ -206,23 +161,11 @@ RED.nodes.registerType('onvif-media', {
     <hr>
 
     <div class="form-row">
-        <label for="node-input-name">
-            <i class="fa fa-tag"></i> Name
-        </label>
-        <input type="text" id="node-input-name" placeholder="ONVIF Media">
+        <label>Name</label>
+        <input type="text" id="node-input-name">
     </div>
 </script>
 
 <script type="text/x-red" data-help-name="onvif-media">
-    <p>
-        <strong>ONVIF Media</strong>
-    </p>
-    <p>
-        Executes media-related ONVIF operations such as retrieving stream URIs,
-        profiles, snapshots, and encoder configuration details.
-    </p>
-    <p>
-        If no action is selected, the action must be provided in
-        <code>msg.action</code>.
-    </p>
+<p>Media-related ONVIF operations such as stream URI retrieval, snapshots, profiles, and encoder configuration.</p>
 </script>
