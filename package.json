@@ -29,5 +29,5 @@
     "onvif-ptz": "nodes/onvif/onvif_ptz.js",
     "onvif-recordings": "nodes/onvif/onvif_recordings.js"
   }
-}
+ }
 }
