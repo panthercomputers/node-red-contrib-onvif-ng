@@ -1,3 +1,9 @@
+/**
+ * Copyright 2025 Panther Computers
+ *
+ * Licensed under the Apache License, Version 2.0
+ */
+
 'use strict';
 
 const onvifCall = require('./lib/onvifCall');
