@@ -32,7 +32,7 @@
       "onvif-media-profile": "nodes/onvif/onvif_media_profile.js",
       "onvif-media-stream": "nodes/onvif/onvif_media_stream.js",
       "onvif-ptz": "nodes/onvif/onvif_ptz.js",
-      "onvif-recordings": "nodes/onvif/onvif_recordings.js"
+      "onvif-recordings": "nodes/onvif/onvif_recording.js"
     }
   }
 }
