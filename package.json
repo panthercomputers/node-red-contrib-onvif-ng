@@ -29,6 +29,8 @@
     "onvif-events": "nodes/onvif/onvif_events.js",
     "onvif-imaging": "nodes/onvif/onvif_imaging.js",
     "onvif-media": "nodes/onvif/onvif_media.js",
+    "onvif-media": "nodes/onvif/onvif_media_profile.js",
+    "onvif-media": "nodes/onvif/onvif_media_stream.js",
     "onvif-ptz": "nodes/onvif/onvif_ptz.js",
     "onvif-recordings": "nodes/onvif/onvif_recordings.js"
   }
