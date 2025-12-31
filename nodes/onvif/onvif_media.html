@@ -29,12 +29,11 @@ RED.nodes.registerType('onvif-media', {
 
     inputs: 1,
     outputs: 1,
-    icon: "media.png",
-
+    icon: "font-awesome/fa-thumbs-o-down",
+    paletteLabel: "ONVIF Media (deprecated)",
     label: function () {
-        return this.name || "ONVIF Media";
+        return (this.name || "ONVIF Media") + " (deprecated)";
     },
-
     oneditprepare: function () {
 
         const toggleFields = () => {
@@ -167,5 +166,11 @@ RED.nodes.registerType('onvif-media', {
 </script>
 
 <script type="text/x-red" data-help-name="onvif-media">
+<p><b>⚠ Deprecated</b></p>
+<p>
+This node is deprecated and will be removed in a future major release.
+Use <b>ONVIF Media Stream</b> or <b>ONVIF Media Profile</b>.
+</p>
+<hr>
 <p>Media-related ONVIF operations such as stream URI retrieval, snapshots, profiles, and encoder configuration.</p>
 </script>
