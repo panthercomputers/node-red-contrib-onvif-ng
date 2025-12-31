@@ -9,8 +9,8 @@
  */
 
 module.exports = function (RED) {
-    const onvifCall = require('onvifCall');
-    const utils = require('utils');
+    const onvifCall = require('./onvifCall');
+    const utils = require('./utils');
 
     function OnVifDeviceNode(config) {
         RED.nodes.createNode(this, config);
@@ -80,5 +80,6 @@ module.exports = function (RED) {
 
     RED.nodes.registerType('onvif-device', OnVifDeviceNode);
 };
+
 
 
