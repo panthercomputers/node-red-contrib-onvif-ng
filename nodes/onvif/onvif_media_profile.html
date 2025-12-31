@@ -1,0 +1,83 @@
+<script type="text/javascript">
+RED.nodes.registerType('onvif-media-profile',{
+    category: 'OnVif',
+    color: '#ff758d',
+    defaults: {
+        name: { value:"" },
+        deviceConfig: { value:"", type:"onvif-config", required:true },
+        action: { value:"" },
+        profileToken: { value:"" },
+        profileName: { value:"" }
+    },
+    inputs:1,
+    outputs:1,
+    icon:"media.png",
+    label: function() {
+        return this.name || "ONVIF Media Profile";
+    },
+    oneditprepare: function () {
+        $(".actionParam-row").hide();
+
+        $("#node-input-action").on("change", function () {
+            $(".actionParam-row").hide();
+            const a = $(this).val();
+
+            if (a === "createProfile") {
+                $("#profileName-row").show();
+                $("#profileToken-row").show();
+            }
+
+            if (a === "deleteProfile") {
+                $("#profileName-row").show();
+            }
+        });
+    }
+});
+</script>
+
+<script type="text/x-red" data-template-name="onvif-media-profile">
+    <div class="form-row">
+        <label><i class="fa fa-cog"></i> Device</label>
+        <input type="text" id="node-input-deviceConfig">
+    </div>
+
+    <div class="form-row">
+        <label><i class="fa fa-wrench"></i> Action</label>
+        <select id="node-input-action">
+            <option value="">— via msg.action —</option>
+            <option value="getProfiles">Get profiles</option>
+            <option value="createProfile">Create profile</option>
+            <option value="deleteProfile">Delete profile</option>
+        </select>
+    </div>
+
+    <div class="form-row actionParam-row" id="profileToken-row">
+        <label>Profile token</label>
+        <input type="text" id="node-input-profileToken">
+    </div>
+
+    <div class="form-row actionParam-row" id="profileName-row">
+        <label>Profile name</label>
+        <input type="text" id="node-input-profileName">
+    </div>
+
+    <hr>
+
+    <div class="form-row">
+        <label>Name</label>
+        <input type="text" id="node-input-name">
+    </div>
+</script>
+
+<script type="text/x-red" data-help-name="onvif-media-profile">
+<p>
+<strong>ONVIF Media Profile</strong>
+</p>
+<p>
+Manages media profiles on an ONVIF device.
+</p>
+<p>
+<strong>Warning:</strong> Creating or deleting profiles can affect existing
+streams. Use with care.
+</p>
+</script>
