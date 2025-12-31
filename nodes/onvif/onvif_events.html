@@ -70,6 +70,11 @@ RED.nodes.registerType('onvif-events', {
     </p>
     <p>
         Subscribes to and manages ONVIF event services on compatible IP cameras.
+      <ul>
+        <li>Events are asynchronous</li>
+        <li>Node emits messages per event </li>
+        <li>Long-running subscriptions may reconnect automatically</li>
+      </ul>
     </p>
     <ul>
         <li><b>Start listening</b> — opens an event subscription</li>
