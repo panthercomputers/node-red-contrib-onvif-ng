@@ -40,7 +40,7 @@ module.exports = function (RED) {
 
             onvifCall(node, {
                 service: 'recording',
-                method: 'getRecordings',
+                method: 'getRecording',
                 msg: {
                     ...msg,
                     xaddr: node.deviceConfig.xaddress
