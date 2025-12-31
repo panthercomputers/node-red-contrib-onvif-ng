@@ -9,8 +9,8 @@
  */
 
 module.exports = function (RED) {
-    const onvifCall = require('./onvif/onvifCall');
-    const utils = require('./onvif/utils');
+    const onvifCall = require('./onvifCall');
+    const utils = require('./utils');
 
     function OnVifRecordingNode(config) {
         RED.nodes.createNode(this, config);
