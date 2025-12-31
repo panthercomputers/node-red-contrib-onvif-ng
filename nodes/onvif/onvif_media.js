@@ -9,8 +9,8 @@
  */
 
 module.exports = function (RED) {
-    const onvifCall = require('./onvif/onvifCall');
-    const utils = require('./onvif/utils');
+    const onvifCall = require('./onvifCall');
+    const utils = require('./utils');
 
     function OnVifMediaNode(config) {
         RED.nodes.createNode(this, config);
@@ -200,3 +200,4 @@ module.exports = function (RED) {
 
     RED.nodes.registerType('onvif-media', OnVifMediaNode);
 };
+
