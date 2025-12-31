@@ -15,6 +15,17 @@ module.exports = function (RED) {
     function OnVifMediaNode(config) {
         RED.nodes.createNode(this, config);
         const node = this;
+        RED.notify(
+          "This node is deprecated. Use ONVIF Media Stream or Media Profile instead.",
+          { type: "warning", timeout: 8000 }
+        );
+        this.warn("This node is deprecated. Please switch to ONVIF Media Stream or Media Profile node.");
+        if (!node._deprecatedWarned) {
+            node._deprecatedWarned = true;
+            node.warn(
+                "onvif-media is deprecated. Use onvif-media-stream or onvif-media-profile instead."
+            );
+        }
 
         node.action = config.action;
         node.profileToken = config.profileToken;
@@ -200,6 +211,4 @@ module.exports = function (RED) {
 
     RED.nodes.registerType('onvif-media', OnVifMediaNode);
 };
-
-
 
