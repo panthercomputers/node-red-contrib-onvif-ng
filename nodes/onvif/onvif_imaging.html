@@ -94,7 +94,7 @@ RED.nodes.registerType('onvif-imaging',{
     </div>
 
     <div class="form-row actionParam-row" id="profile-div">
-        <label>Profile</label>
+        <label>Profile Token</label>
         <input type="text" id="node-input-profile" style="width:65%">
         <a id="node-input-profile-search" class="btn">
             <i class="fa fa-search"></i>
@@ -112,7 +112,8 @@ RED.nodes.registerType('onvif-imaging',{
 <script type="text/x-red" data-help-name="onvif-imaging">
 <p>Interact with the ONVIF Imaging service.</p>
 <p>
-<strong>Get settings</strong> retrieves the current imaging configuration for the selected profile.<br>
+<strong>Imaging settings are profile-specific. Use the Media node to discover profile tokens.<br>
+<strong>Get settings</strong> retrieves the current imaging configuration for the selected profile token.<br>
 <strong>Set settings</strong> updates imaging parameters using values from <code>msg.payload</code>.
 </p>
 </script>
