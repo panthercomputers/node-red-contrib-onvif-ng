@@ -7,7 +7,15 @@
  *
  * Licensed under the Apache License, Version 2.0
  */
-    'use strict';
+
+/**
+ * NOTE:
+ * Device service methods use signature: method(callback)
+ * All other services use: method(params, callback)
+ */
+
+
+'use strict';
 
 module.exports = async function onvifCall(node, options) {
     const {
@@ -32,9 +40,12 @@ module.exports = async function onvifCall(node, options) {
         return;
     }
 
-    if (service && !deviceConfig.cam.services?.[service]) {
+    // Device service is always available directly on cam
+    if (service && service !== "device") {
+        if (!deviceConfig.cam.services || !deviceConfig.cam.services[service]) {
         node.error(`ONVIF service not supported: ${service}`, msg);
         return;
+        }
     }
 
     const cam = deviceConfig.cam;
@@ -55,23 +66,30 @@ module.exports = async function onvifCall(node, options) {
             }
         }, timeout);
 
-        cam[method](params, (err, result, xml) => {
-            if (completed) return;
-            completed = true;
-            clearTimeout(timeoutHandle);
+    const callback = (err, result, xml) => {
+        if (completed) return;
+        completed = true;
+        clearTimeout(timeoutHandle);
 
-            if (err) {
-                node.error(err.message || err, msg);
-                return;
-            }
+        if (err) {
+            node.error(err.message || err, msg);
+            return;
+        }
+    
+        if (onSuccess) {
+            onSuccess(result, xml);
+        } else {
+            msg.payload = result;
+            node.send(msg);
+        }
+    };
 
-            if (onSuccess) {
-                onSuccess(result, xml);
-            } else {
-                msg.payload = result;
-                node.send(msg);
-            }
-        });
+    // Device service methods do NOT accept params
+    if (service === "device") {
+        cam[method](callback);
+    } else {
+        cam[method](params, callback);
+    }
     }
     catch (err) {
         clearTimeout(timeoutHandle);
