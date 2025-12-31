@@ -16,23 +16,23 @@
     "url": "https://github.com/panthercomputers/node-red-contrib-onvif-2026.git"
   },
   "files": [
-          "nodes/*"
-    ],
+    "nodes/**/*"
+  ],
   "dependencies": {
     "onvif": "^0.6.4"
   },
-"node-red": {
-  "nodes": {
-    "onvif-config": "nodes/onvif/onvif_config.js",
-    "onvif-device": "nodes/onvif/onvif_device.js",
-    "onvif-discovery": "nodes/onvif/onvif_discovery.js",
-    "onvif-events": "nodes/onvif/onvif_events.js",
-    "onvif-imaging": "nodes/onvif/onvif_imaging.js",
-    "onvif-media": "nodes/onvif/onvif_media.js",
-    "onvif-media-profile": "nodes/onvif/onvif_media_profile.js",
-    "onvif-media-stream": "nodes/onvif/onvif_media_stream.js",
-    "onvif-ptz": "nodes/onvif/onvif_ptz.js",
-    "onvif-recordings": "nodes/onvif/onvif_recordings.js"
+  "node-red": {
+    "nodes": {
+      "onvif-config": "nodes/onvif/onvif_config.js",
+      "onvif-device": "nodes/onvif/onvif_device.js",
+      "onvif-discovery": "nodes/onvif/onvif_discovery.js",
+      "onvif-events": "nodes/onvif/onvif_events.js",
+      "onvif-imaging": "nodes/onvif/onvif_imaging.js",
+      "onvif-media": "nodes/onvif/onvif_media.js",
+      "onvif-media-profile": "nodes/onvif/onvif_media_profile.js",
+      "onvif-media-stream": "nodes/onvif/onvif_media_stream.js",
+      "onvif-ptz": "nodes/onvif/onvif_ptz.js",
+      "onvif-recordings": "nodes/onvif/onvif_recordings.js"
+    }
   }
- }
 }
