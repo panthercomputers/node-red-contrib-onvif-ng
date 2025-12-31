@@ -1,0 +1,102 @@
+<script type="text/javascript">
+RED.nodes.registerType('onvif-media-stream',{
+    category: 'OnVif',
+    color: '#ff758d',
+    defaults: {
+        name: { value:"" },
+        deviceConfig: { value:"", type:"onvif-config", required:true },
+        action: { value:"" },
+        profileName: { value:"" },
+        protocol: { value:"RTSP" },
+        stream: { value:"RTP-Unicast" }
+    },
+    inputs:1,
+    outputs:1,
+    icon:"media.png",
+    label: function() {
+        return this.name || "ONVIF Media Stream";
+    },
+    oneditprepare: function () {
+        $(".actionParam-row").hide();
+
+        $("#node-input-action").on("change", function () {
+            $(".actionParam-row").hide();
+            const a = $(this).val();
+
+            if (a === "getStreamUri") {
+                $("#profileName-row").show();
+                $("#protocol-row").show();
+                $("#stream-row").show();
+            }
+
+            if (a === "getSnapshotUri" || a === "getSnapshot") {
+                $("#profileName-row").show();
+            }
+        });
+    }
+});
+</script>
+
+<script type="text/x-red" data-template-name="onvif-media-stream">
+    <div class="form-row">
+        <label><i class="fa fa-cog"></i> Device</label>
+        <input type="text" id="node-input-deviceConfig">
+    </div>
+
+    <div class="form-row">
+        <label><i class="fa fa-wrench"></i> Action</label>
+        <select id="node-input-action">
+            <option value="">— via msg.action —</option>
+            <option value="getStreamUri">Get stream URI</option>
+            <option value="getSnapshotUri">Get snapshot URI</option>
+            <option value="getSnapshot">Get snapshot (image)</option>
+            <option value="reconnect">Reconnect</option>
+        </select>
+    </div>
+
+    <div class="form-row actionParam-row" id="profileName-row">
+        <label>Profile</label>
+        <input type="text" id="node-input-profileName">
+    </div>
+
+    <div class="form-row actionParam-row" id="protocol-row">
+        <label>Protocol</label>
+        <select id="node-input-protocol">
+            <option value="RTSP">RTSP</option>
+            <option value="HTTP">HTTP</option>
+            <option value="UDP">UDP</option>
+        </select>
+    </div>
+
+    <div class="form-row actionParam-row" id="stream-row">
+        <label>RTP Stream</label>
+        <select id="node-input-stream">
+            <option value="RTP-Unicast">Unicast</option>
+            <option value="RTP-Multicast">Multicast</option>
+        </select>
+    </div>
+
+    <hr>
+
+    <div class="form-row">
+        <label>Name</label>
+        <input type="text" id="node-input-name">
+    </div>
+</script>
+
+<script type="text/x-red" data-help-name="onvif-media-stream">
+<p>
+<strong>ONVIF Media Stream</strong>
+</p>
+<p>
+Retrieves stream and snapshot information from an ONVIF camera.
+</p>
+<ul>
+<li><b>Get stream URI</b> — returns RTSP/HTTP stream URL</li>
+<li><b>Get snapshot URI</b> — returns snapshot endpoint</li>
+<li><b>Get snapshot</b> — downloads snapshot image</li>
+</ul>
+<p>
+If no action is selected, <code>msg.action</code> must be provided.
+</p>
+</script>
