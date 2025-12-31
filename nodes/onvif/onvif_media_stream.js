@@ -6,7 +6,7 @@
 
 'use strict';
 
-const onvifCall = require('./lib/onvifCall');
+const onvifCall = require('./onvifCall');
 
 module.exports = function (RED) {
 
