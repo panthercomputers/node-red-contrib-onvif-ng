@@ -1,50 +1,83 @@
-<!--
-  Original work:
-  Copyright 2018 Bart Butenaers
+/**
+ * Original work:
+ * Copyright 2018 Bart Butenaers
+ *
+ * Modifications:
+ * Copyright 2025 Panther Computers
+ *
+ * Licensed under the Apache License, Version 2.0
+ */
 
-  Modifications:
-  Copyright 2025 Panther Computers
+module.exports = function (RED) {
+    const onvifCall = require('./onvifCall');
+    const utils = require('./utils');
 
-  Licensed under the Apache License, Version 2.0 (the "License");
--->
+    function OnVifDeviceNode(config) {
+        RED.nodes.createNode(this, config);
+        const node = this;
 
-<script type="text/javascript">
-RED.nodes.registerType('onvif-discovery',{
-    category: 'OnVif',
-    color: '#ff758d',
-    defaults: {
-        name: {value:""},
-        timeout: {value:5},
-        separate: {value:true}
-    },
-    inputs:1,
-    outputs:1,
-    icon:"discovery.png",
-    label: function() {
-        return this.name || "OnVIf discovery";
+        node.action = config.action;
+        node.deviceConfig = RED.nodes.getNode(config.deviceConfig);
+
+        if (node.deviceConfig) {
+            node.listener = (status) => {
+                utils.setNodeStatus(node, 'device', status);
+            };
+
+            node.deviceConfig.addListener('onvif_status', node.listener);
+            utils.setNodeStatus(node, 'device', node.deviceConfig.onvifStatus);
+            node.deviceConfig.initialize();
+        }
+
+        node.on('input', function (msg) {
+            const action = node.action || msg.action;
+            if (!action) {
+                node.error('No action specified', msg);
+                return;
+            }
+
+            const newMsg = {
+                ...msg,
+                action,
+                xaddr: node.deviceConfig?.xaddress
+            };
+
+            switch (action) {
+                case 'getDeviceInformation':
+                case 'getHostname':
+                case 'getSystemDateAndTime':
+                case 'getScopes':
+                case 'systemReboot':
+                case 'getCapabilities':
+                    onvifCall(node, {
+                        service: 'device',
+                        method: action,
+                        msg: newMsg,
+                        onSuccess: (data, xml) =>
+                            utils.handleResult(node, null, data, xml, newMsg)
+                    });
+                    break;
+
+                case 'reconnect':
+                    onvifCall(node, {
+                        allowDisconnected: true,
+                        method: 'connect',
+                        msg: newMsg
+                    });
+                    break;
+
+                default:
+                    node.error(`Unsupported action: ${action}`, msg);
+            }
+        });
+
+        node.on('close', function () {
+            if (node.listener && node.deviceConfig) {
+                node.deviceConfig.removeListener('onvif_status', node.listener);
+            }
+        });
     }
-});
-</script>
 
-<script type="text/x-red" data-template-name="onvif-discovery">
-    <div class="form-row">
-        <label>Timeout (sec)</label>
-        <input type="number" id="node-input-timeout" min="0">
-    </div>
-
-    <div class="form-row">
-        <input type="checkbox" id="node-input-separate">
-        <label for="node-input-separate">Separate message per device</label>
-    </div>
-
-    <div class="form-row">
-        <label>Name</label>
-        <input type="text" id="node-input-name">
-    </div>
-</script>
-
-<script type="text/x-red" data-help-name="onvif-discovery">
-<p>Discover ONVIF devices on the local network.</p>
-</script>
-
+    RED.nodes.registerType('onvif-device', OnVifDeviceNode);
+};
 
