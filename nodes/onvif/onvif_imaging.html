@@ -19,7 +19,7 @@ RED.nodes.registerType('onvif-imaging',{
     },
     inputs:1,
     outputs:1,
-    icon:"imaging.png",
+    icon:"font-awesome/fa-eye",
     label: function() {
         return this.name || "ONVIF Imaging";
     },
@@ -112,7 +112,8 @@ RED.nodes.registerType('onvif-imaging',{
 <script type="text/x-red" data-help-name="onvif-imaging">
 <p>Interact with the ONVIF Imaging service.</p>
 <p>
-<strong>Imaging settings are profile-specific. Use the Media node to discover profile tokens.<br>
+<strong>Imaging settings are profile-specific. Use the Media node to discover profile tokens.</strong>
+<p>
 <strong>Get settings</strong> retrieves the current imaging configuration for the selected profile token.<br>
 <strong>Set settings</strong> updates imaging parameters using values from <code>msg.payload</code>.
 </p>
