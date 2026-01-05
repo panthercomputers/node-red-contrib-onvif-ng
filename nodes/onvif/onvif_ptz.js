@@ -8,192 +8,122 @@
  * Licensed under the Apache License, Version 2.0
  */
 
-module.exports = function (RED) {
-    const onvifCall = require('./onvifCall');
-    const utils = require('./utils');
+'use strict';
 
-    function OnVifPtzNode(config) {
+const onvifCall = require('./onvifCall');
+
+module.exports = function (RED) {
+    function OnvifPTZNode(config) {
         RED.nodes.createNode(this, config);
         const node = this;
 
-        node.action = config.action;
-        node.profileToken = config.profileToken;
-        node.profileName = config.profileName;
-
-        node.pan = Number(config.pan);
-        node.tilt = Number(config.tilt);
-        node.zoom = Number(config.zoom);
-        node.speed = Number(config.speed) || 0.5;
-        node.timeout = Number(config.timeout) || 1.5;
-
         node.deviceConfig = RED.nodes.getNode(config.deviceConfig);
 
-        /* ---------- STATUS TRACKING ---------- */
-        if (node.deviceConfig) {
-            node.listener = (status) => {
-                utils.setNodeStatus(node, 'ptz', status);
-            };
-            node.deviceConfig.addListener('onvif_status', node.listener);
-            utils.setNodeStatus(node, 'ptz', node.deviceConfig.onvifStatus);
-            node.deviceConfig.initialize();
-        }
-
-        /* ---------- INPUT ---------- */
         node.on('input', function (msg) {
-            const action = node.action || msg.action;
+            const action = msg.action || config.action;
+            const profile = msg.profile || config.profile;
+
             if (!action) {
-                node.error('No action specified', msg);
+                node.error('PTZ action is required', msg);
                 return;
             }
 
-            if (action !== 'reconnect') {
-                if (!node.deviceConfig || node.deviceConfig.onvifStatus !== 'connected') {
-                    node.error('Not connected to device');
-                    return;
-                }
-                if (!utils.hasService(node.deviceConfig.cam, 'ptz')) {
-                    node.error('PTZ service not supported');
-                    return;
-                }
-            }
-
-            const profileToken =
-                node.profileToken ||
-                msg.profileToken ||
-                (node.profileName
-                    ? node.deviceConfig.getProfileTokenByName(node.profileName)
-                    : undefined);
-
-            if (!profileToken && action !== 'reconnect') {
-                node.error('Missing profileToken');
+            if (!profile) {
+                node.error('ProfileToken is required for PTZ actions', msg);
                 return;
             }
 
-            const pan = Number(msg.pan ?? node.pan);
-            const tilt = Number(msg.tilt ?? node.tilt);
-            const zoom = Number(msg.zoom ?? node.zoom);
-            const speed = Number(msg.speed ?? node.speed);
-            const timeout = Number(msg.timeout ?? node.timeout);
+            let params = { ProfileToken: profile };
 
-            const newMsg = {
-                ...msg,
-                action,
-                xaddr: node.deviceConfig?.xaddress
-            };
-
-            /* ---------- ACTIONS ---------- */
             switch (action) {
 
-                case 'getStatus':
-                    onvifCall(node, {
-                        service: 'ptz',
-                        method: 'getStatus',
-                        args: [profileToken],
-                        msg: newMsg
-                    });
+                case 'continuousMove':
+                    if (!msg.velocity) {
+                        node.error('continuousMove requires msg.velocity', msg);
+                        return;
+                    }
+
+                    params.Velocity = normalizeVelocity(msg.velocity, node, msg);
+                    if (!params.Velocity) return;
+
+                    params.Timeout = msg.timeout || 1;
                     break;
 
-                case 'getPresets':
-                    onvifCall(node, {
-                        service: 'ptz',
-                        method: 'getPresets',
-                        args: [profileToken],
-                        msg: newMsg
-                    });
+                case 'stop':
+                    params.PanTilt = msg.panTilt !== false;
+                    params.Zoom = msg.zoom !== false;
                     break;
 
                 case 'gotoPreset':
                     if (!msg.presetToken) {
-                        node.error('Missing presetToken');
+                        node.error('gotoPreset requires msg.presetToken', msg);
                         return;
                     }
-                    onvifCall(node, {
-                        service: 'ptz',
-                        method: 'gotoPreset',
-                        args: [profileToken, msg.presetToken],
-                        msg: newMsg
-                    });
+                    params.PresetToken = msg.presetToken;
+
+                    if (msg.speed) {
+                        params.Speed = normalizeSpeed(msg.speed, node, msg);
+                        if (!params.Speed) return;
+                    }
                     break;
 
-                case 'absoluteMove':
-                    onvifCall(node, {
-                        service: 'ptz',
-                        method: 'absoluteMove',
-                        args: [
-                            profileToken,
-                            { x: pan, y: tilt, zoom },
-                            { x: speed, y: speed, zoom: speed }
-                        ],
-                        msg: newMsg
-                    });
+                case 'getPresets':
+                case 'getStatus':
+                    // no extra params
                     break;
 
-                case 'relativeMove':
-                    onvifCall(node, {
-                        service: 'ptz',
-                        method: 'relativeMove',
-                        args: [
-                            profileToken,
-                            { x: pan, y: tilt, zoom },
-                            { x: speed, y: speed, zoom: speed }
-                        ],
-                        msg: newMsg
-                    });
+                case 'setPreset':
+                    if (msg.presetName) {
+                        params.PresetName = msg.presetName;
+                    }
                     break;
 
-                case 'continuousMove':
-                    onvifCall(node, {
-                        service: 'ptz',
-                        method: 'continuousMove',
-                        args: [
-                            profileToken,
-                            { x: pan, y: tilt, zoom }
-                        ],
-                        msg: newMsg,
-                        onSuccess: () => {
-                            /* Safety stop */
-                            setTimeout(() => {
-                                onvifCall(node, {
-                                    service: 'ptz',
-                                    method: 'stop',
-                                    args: [profileToken],
-                                    allowDisconnected: true
-                                });
-                            }, timeout * 1000);
-                        }
-                    });
-                    break;
-
-                case 'stop':
-                    onvifCall(node, {
-                        service: 'ptz',
-                        method: 'stop',
-                        args: [profileToken],
-                        msg: newMsg
-                    });
-                    break;
-
-                case 'reconnect':
-                    onvifCall(node, {
-                        allowDisconnected: true,
-                        method: 'connect',
-                        msg: newMsg
-                    });
+                case 'removePreset':
+                    if (!msg.presetToken) {
+                        node.error('removePreset requires msg.presetToken', msg);
+                        return;
+                    }
+                    params.PresetToken = msg.presetToken;
                     break;
 
                 default:
-                    node.error(`Unsupported action: ${action}`, msg);
+                    node.error(`Unknown PTZ action: ${action}`, msg);
+                    return;
             }
-        });
 
-        /* ---------- CLEANUP ---------- */
-        node.on('close', function () {
-            if (node.listener && node.deviceConfig) {
-                node.deviceConfig.removeListener('onvif_status', node.listener);
-            }
+            onvifCall(node, {
+                service: 'ptz',
+                method: action,
+                params,
+                msg
+            });
         });
     }
 
-    RED.nodes.registerType('onvif-ptz', OnVifPtzNode);
+    RED.nodes.registerType('onvif-ptz', OnvifPTZNode);
 };
 
+// ---------- helpers ----------
+
+function normalizeVelocity(v, node, msg) {
+    if (typeof v !== 'object') {
+        node.error('Velocity must be an object', msg);
+        return null;
+    }
+
+    const clamp = (n) => Math.max(-1, Math.min(1, Number(n)));
+
+    return {
+        PanTilt: v.PanTilt ? {
+            x: clamp(v.PanTilt.x),
+            y: clamp(v.PanTilt.y)
+        } : undefined,
+        Zoom: v.Zoom ? {
+            x: clamp(v.Zoom.x)
+        } : undefined
+    };
+}
+
+function normalizeSpeed(v, node, msg) {
+    return normalizeVelocity(v, node, msg);
+}
