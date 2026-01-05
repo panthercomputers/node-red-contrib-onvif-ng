@@ -1,8 +1,8 @@
-/**
- * Copyright 2025 Panther Computers
- *
- * Licensed under the Apache License, Version 2.0
- */
+<!--
+  Copyright 2025 Panther Computers
+
+  Licensed under the Apache License, Version 2.0
+-->
 
 'use strict';
 
@@ -37,21 +37,27 @@ module.exports = function (RED) {
                 return;
             }
 
-            let profileToken = msg.profileToken || node.profileToken;
+            let params = {};
 
-            if (!profileToken && node.profileName) {
-                profileToken = node.deviceConfig.getProfileTokenByName(
-                    node.profileName
-                );
+            // Resolve profile token only when required
+            if (action !== 'getProfiles') {
+                let profileToken = msg.profileToken || node.profileToken;
+
+                if (!profileToken && node.profileName) {
+                    profileToken =
+                        node.deviceConfig.getProfileTokenByName(node.profileName);
+                }
+
+                if (!profileToken) {
+                    node.error('No profile token resolved', msg);
+                    return;
+                }
+
+                params.ProfileToken = profileToken;
             }
 
-            const params = Object.assign({}, msg, {
-                ProfileToken: profileToken,
-                Name: node.profileName
-            });
-
             onvifCall(node, {
-                service: 'media',
+                service: null,              // media methods are on cam directly
                 method: action,
                 params,
                 msg
