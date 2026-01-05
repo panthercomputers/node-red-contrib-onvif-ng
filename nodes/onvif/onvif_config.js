@@ -8,83 +8,154 @@
  * Licensed under the Apache License, Version 2.0
  */
 
-'use strict';
-
-const { Cam } = require('onvif');
-
 module.exports = function (RED) {
+    const onvif = require("onvif");
 
-    function OnvifConfigNode(config) {
+    const STATUS = {
+        CONNECTED: "connected",
+        DISCONNECTED: "disconnected",
+        INITIALIZING: "initializing",
+        UNCONFIGURED: "unconfigured"
+    };
+
+    function setOnvifStatus(node, status) {
+        node.onvifStatus = status;
+        node.emit("onvif_status", status);
+
+        switch (status) {
+            case STATUS.CONNECTED:
+                node.status({ fill: "green", shape: "dot", text: "connected" });
+                break;
+            case STATUS.INITIALIZING:
+                node.status({ fill: "yellow", shape: "ring", text: "connecting" });
+                break;
+            case STATUS.DISCONNECTED:
+                node.status({ fill: "red", shape: "ring", text: "disconnected" });
+                break;
+            case STATUS.UNCONFIGURED:
+                node.status({ fill: "grey", shape: "ring", text: "credentials missing" });
+                break;
+            default:
+                node.status({});
+        }
+    }
+
+    function OnVifConfigNode(config) {
         RED.nodes.createNode(this, config);
-
         const node = this;
 
-        node.xaddress = config.xaddress;
-        node.port = config.port || 80;
-        node.secure = config.secure || false;
+        this.xaddress = config.xaddress;
+        this.port = Number(config.port || 80);
+        this.name = config.name;
+        this.timeout = Number(config.timeout || 3);
+        this.checkConnectionInterval = Number(config.checkConnectionInterval || 5);
 
-        // Device fingerprint (used for portability & safety)
-        node.deviceKey = `${node.xaddress}:${node.port}`;
+        node.cam = null;
+        node._initializing = false;
+        node._checking = false;
+        node.checkConnectionTimer = null;
 
-        // ---- Portable authentication resolution ----
-        const envKey = node.xaddress
-            ? node.xaddress.replace(/\./g, '_')
-            : null;
+        node.setMaxListeners(50);
 
-        node.user =
-            node.credentials?.user ||
-            (envKey && process.env[`ONVIF_CAM_${envKey}_USER`]) ||
-            process.env.ONVIF_USER ||
-            null;
+        /* ------------------------------------------------------------
+         * Initialization / connection
+         * ---------------------------------------------------------- */
+        this.initialize = function () {
+            if (node.cam || node._initializing) return;
 
-        node.password =
-            node.credentials?.password ||
-            (envKey && process.env[`ONVIF_CAM_${envKey}_PASS`]) ||
-            process.env.ONVIF_PASS ||
-            null;
+            if (!node.xaddress) {
+                setOnvifStatus(node, STATUS.UNCONFIGURED);
+                node.error("ONVIF device address not configured");
+                return;
+            }
 
-        // Fail fast if credentials are missing
-        if (!node.user || !node.password) {
-            node.warn(
-                `ONVIF credentials missing for ${node.deviceKey}. ` +
-                `Set credentials in config node or environment variables.`
-            );
-            return;
-        }
+            const creds = node.credentials || {};
 
-        // ---- Create ONVIF camera instance ----
-        try {
-            node.cam = new Cam({
+            // 🔐 Credential validation (PORTABLE AUTH)
+            let username = creds.user;
+            let password = creds.password;
+
+            // Optional environment variable fallback
+            if (!username && process.env.ONVIF_USER) {
+                username = process.env.ONVIF_USER;
+                password = process.env.ONVIF_PASS;
+            }
+
+            if (!username || !password) {
+                setOnvifStatus(node, STATUS.UNCONFIGURED);
+                node.error("ONVIF credentials are not configured");
+                return;
+            }
+
+            node._initializing = true;
+            setOnvifStatus(node, STATUS.INITIALIZING);
+
+            const options = {
                 hostname: node.xaddress,
                 port: node.port,
-                username: node.user,
-                password: node.password,
-                secure: node.secure,
-                timeout: 8000
-            }, function (err) {
+                username,
+                password,
+                timeout: node.timeout * 1000
+            };
+
+            node.cam = new onvif.Cam(options, (err) => {
+                node._initializing = false;
+
                 if (err) {
-                    node.onvifStatus = 'error';
-                    node.error(`ONVIF connection failed: ${err.message || err}`);
+                    node.error(err);
+                    setOnvifStatus(node, STATUS.DISCONNECTED);
                 } else {
-                    node.onvifStatus = 'connected';
-                    node.log(`ONVIF connected: ${node.deviceKey}`);
+                    setOnvifStatus(node, STATUS.CONNECTED);
                 }
             });
-        } catch (err) {
-            node.onvifStatus = 'error';
-            node.error(`ONVIF init exception: ${err.message}`);
-        }
 
-        node.on('close', function () {
+            if (node.checkConnectionTimer) {
+                clearInterval(node.checkConnectionTimer);
+                node.checkConnectionTimer = null;
+            }
+
+            if (node.checkConnectionInterval > 0) {
+                node.checkConnectionTimer = setInterval(() => {
+                    if (!node.cam || node._checking) return;
+
+                    node._checking = true;
+
+                    node.cam.getSystemDateAndTime((err) => {
+                        node._checking = false;
+
+                        if (err) {
+                            setOnvifStatus(node, STATUS.DISCONNECTED);
+                            return;
+                        }
+
+                        setOnvifStatus(node, STATUS.CONNECTED);
+                    });
+                }, node.checkConnectionInterval * 1000);
+            }
+        };
+
+        /* ------------------------------------------------------------
+         * Cleanup
+         * ---------------------------------------------------------- */
+        node.on("close", function () {
+            setOnvifStatus(node, "");
+
+            if (node.checkConnectionTimer) {
+                clearInterval(node.checkConnectionTimer);
+                node.checkConnectionTimer = null;
+            }
+
             node.cam = null;
-            node.onvifStatus = 'disconnected';
+            node._checking = false;
+            node._initializing = false;
+            node.removeAllListeners("onvif_status");
         });
     }
 
-    RED.nodes.registerType('onvif-config', OnvifConfigNode, {
+    RED.nodes.registerType("onvif-config", OnVifConfigNode, {
         credentials: {
-            user: { type: 'text' },
-            password: { type: 'password' }
+            user: { type: "text" },
+            password: { type: "password" }
         }
     });
 };
