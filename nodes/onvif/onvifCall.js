@@ -40,13 +40,7 @@ module.exports = async function onvifCall(node, options) {
         return;
     }
 
-    // Device service is always available directly on cam
-    if (service && service !== "device") {
-        if (!deviceConfig.cam.services || !deviceConfig.cam.services[service]) {
-        node.error(`ONVIF service not supported: ${service}`, msg);
-        return;
-        }
-    }
+// Service presence is determined by method existence (onvif lib behavior)
 
     const cam = deviceConfig.cam;
 
