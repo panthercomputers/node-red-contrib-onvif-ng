@@ -19,7 +19,6 @@
 
 module.exports = async function onvifCall(node, options) {
     const {
-        service,
         method,
         params = {},
         msg,
@@ -40,8 +39,6 @@ module.exports = async function onvifCall(node, options) {
         return;
     }
 
-// Service presence is determined by method existence (onvif lib behavior)
-
     const cam = deviceConfig.cam;
 
     if (typeof cam[method] !== 'function') {
@@ -52,14 +49,6 @@ module.exports = async function onvifCall(node, options) {
     let timeoutHandle;
     let completed = false;
 
-    try {
-        timeoutHandle = setTimeout(() => {
-            if (!completed) {
-                completed = true;
-                node.error(`ONVIF call timeout: ${method}`, msg);
-            }
-        }, timeout);
-
     const callback = (err, result, xml) => {
         if (completed) return;
         completed = true;
@@ -69,30 +58,37 @@ module.exports = async function onvifCall(node, options) {
             node.error(err.message || err, msg);
             return;
         }
-    
-    try {
-        if (onSuccess) {
-            const sent = onSuccess(result, xml);
-            if (sent === false) {
-                return;
+
+        try {
+            if (onSuccess) {
+                const sent = onSuccess(result, xml);
+                if (sent === false) return;
+            } else {
+                msg.payload = result;
+                node.send(msg);
             }
-        } else {
-            msg.payload = result;
-            node.send(msg);
-    }
-    } catch (err) {
-        node.error(`ONVIF onSuccess error: ${err.message}`, msg);
-    }
+        } catch (e) {
+            node.error(`ONVIF onSuccess error: ${e.message}`, msg);
+        }
     };
 
-    // Device service methods do NOT accept params
-    if (service === "device") {
-        cam[method](callback);
-    } else {
-        cam[method](params, callback);
-    }
-    }
-    catch (err) {
+    try {
+        timeoutHandle = setTimeout(() => {
+            if (!completed) {
+                completed = true;
+                node.error(`ONVIF call timeout: ${method}`, msg);
+            }
+        }, timeout);
+
+        // 🔑 CRITICAL FIX:
+        // If params is empty, call method(callback)
+        if (!params || Object.keys(params).length === 0) {
+            cam[method](callback);
+        } else {
+            cam[method](params, callback);
+        }
+
+    } catch (err) {
         clearTimeout(timeoutHandle);
         node.error(`ONVIF exception (${method}): ${err.message}`, msg);
     }
