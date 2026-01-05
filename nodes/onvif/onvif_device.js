@@ -81,5 +81,3 @@ module.exports = function (RED) {
     RED.nodes.registerType('onvif-device', OnVifDeviceNode);
 };
 
-
-
