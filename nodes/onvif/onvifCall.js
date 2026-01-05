@@ -70,12 +70,19 @@ module.exports = async function onvifCall(node, options) {
             return;
         }
     
+    try {
         if (onSuccess) {
-            onSuccess(result, xml);
+            const sent = onSuccess(result, xml);
+            if (sent === false) {
+                return;
+            }
         } else {
             msg.payload = result;
             node.send(msg);
-        }
+    }
+    } catch (err) {
+        node.error(`ONVIF onSuccess error: ${err.message}`, msg);
+    }
     };
 
     // Device service methods do NOT accept params
