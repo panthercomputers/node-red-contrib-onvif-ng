@@ -1,5 +1,5 @@
 {
-  "name": "node-red-contrib-onvif-2026",
+  "name": "node-red-contrib-onvif-ng",
   "version": "1.0.0",
   "description": "ONVIF nodes for Node-RED (modernized)",
   "keywords": [
@@ -13,7 +13,7 @@
   "author": "Panther Computers",
   "repository": {
     "type": "git",
-    "url": "https://github.com/panthercomputers/node-red-contrib-onvif-2026.git"
+    "url": "https://github.com/panthercomputers/node-red-contrib-onvif-ng.git"
   },
   "files": [
     "nodes/**/*"
@@ -31,7 +31,6 @@
       "onvif-media": "nodes/onvif/onvif_media.js",
       "onvif-media-profile": "nodes/onvif/onvif_media_profile.js",
       "onvif-media-stream": "nodes/onvif/onvif_media_stream.js",
-      "onvif-ptz": "nodes/onvif/onvif_ptz.js",
       "onvif-recordings": "nodes/onvif/onvif_recording.js"
     }
   }
