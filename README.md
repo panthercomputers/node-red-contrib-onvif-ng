@@ -1,4 +1,4 @@
-# node-red-contrib-onvif-2026
+# node-red-contrib-onvif-ng
 
 *** This project is not affiliated with or endorsed by the original author. ***
 
@@ -10,12 +10,15 @@ Node Red nodes for communicating with OnVif compliant IP devices
 
 ** The entire project will be updated over the next few months inclduing documentation.  Once functionally complete feel free to contribute or make requests and we'll take on the challenge to improve grow, and keep it stable **
 
+** Note: PTZ support is intentionally excluded from v1.x. 
+It may return in a future release or via community contribution. **
+
 ## Install
 Run the following npm command in your Node-RED user directory (typically ~/.node-red), to install the latest beta version of this node:
 ```
 npm install node-red-contrib-onvif-2026
 ```
-See the [releases](https://github.com/panthercomputers/node-red-contrib-onvif-2026/releases) page for an overview of what has changed per release.
+See the [releases](https://github.com/panthercomputers/node-red-contrib-onvif-ng/releases) page for an overview of what has changed per release.
 
 ## Support my Node-RED developments
 
