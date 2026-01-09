@@ -1,0 +1,147 @@
+<!--
+  Original work: Copyright 2018 Bart Butenaers
+  Modifications: Copyright 2025–2026 Panther Computers
+  Licensed under the Apache License, Version 2.0
+-->
+<script type="text/javascript">
+RED.nodes.registerType('onvif-ptz', {
+    category: 'OnVif',
+    color: '#ff758d',
+    defaults: {
+        name: { value: "" },
+        deviceConfig: { value: "", type: "onvif-config", required: true },
+        profileToken: { value: "" },   // NOT required in editor
+        action: { value: "", required: true },
+
+        panSpeed: { value: 0 },
+        tiltSpeed: { value: 0 },
+        zoomSpeed: { value: 0 },
+
+        panPosition: { value: 0 },
+        tiltPosition: { value: 0 },
+        zoomPosition: { value: 0 },
+
+        panTranslation: { value: 0 },
+        tiltTranslation: { value: 0 },
+        zoomTranslation: { value: 0 },
+
+        time: { value: 1 },
+        preset: { value: "" },
+        presetName: { value: "" },
+
+        stopPanTilt: { value: true },
+        stopZoom: { value: true }
+    },
+    inputs: 1,
+    outputs: 1,
+    icon: "font-awesome/fa-arrows",
+    label: function () {
+        return this.name || "ONVIF PTZ";
+    },
+
+    oneditprepare: function () {
+        const node = this;
+        const $device = $("#node-input-deviceConfig");
+        const $profile = $("#node-input-profileToken");
+
+        function populateProfiles(profiles) {
+            $profile.empty();
+
+            if (!Array.isArray(profiles) || profiles.length === 0) {
+                $profile.append('<option value="">No profiles found</option>');
+                return;
+            }
+
+            $profile.append('<option value="">— Select profile —</option>');
+
+            profiles.forEach(p => {
+                $("<option>")
+                    .val(p.value)
+                    .text(p.label)
+                    .appendTo($profile);
+            });
+
+            if (node.profileToken) {
+                $profile.val(node.profileToken);
+            }
+        }
+
+        function loadProfiles() {
+            const configId = $device.val();
+
+            if (!configId || configId === "_ADD_") {
+                $profile.empty().append('<option value="">Select device first</option>');
+                return;
+            }
+
+            $profile.empty().append('<option value="">Loading profiles…</option>');
+
+            $.getJSON("onvifdevice/profiles/" + configId)
+                .done(populateProfiles)
+                .fail(() => {
+                    $profile.empty().append('<option value="">Failed to load profiles</option>');
+                });
+        }
+
+        $("#refresh-profiles").on("click", loadProfiles);
+
+        $device.on("change", function () {
+            node.profileToken = "";
+            loadProfiles();
+        });
+
+        // Load automatically if device already selected
+        if ($device.val()) {
+            loadProfiles();
+        }
+    }
+});
+</script>
+
+<script type="text/x-red" data-template-name="onvif-ptz">
+    <div class="form-row">
+        <label for="node-input-deviceConfig">
+            <i class="fa fa-camera"></i> Device
+        </label>
+        <input type="text" id="node-input-deviceConfig">
+    </div>
+
+    <div class="form-row">
+        <label for="node-input-action">
+            <i class="fa fa-play"></i> Action
+        </label>
+        <select id="node-input-action">
+            <option value="">— Select action —</option>
+            <option value="continuousMove">Continuous move</option>
+            <option value="absoluteMove">Absolute move</option>
+            <option value="relativeMove">Relative move</option>
+            <option value="gotoHomePosition">Goto home position</option>
+            <option value="setHomePosition">Set home position</option>
+            <option value="getPresets">Get presets</option>
+            <option value="setPreset">Set preset</option>
+            <option value="gotoPreset">Goto preset</option>
+            <option value="removePreset">Remove preset</option>
+            <option value="getStatus">Get status</option>
+            <option value="stop">Stop</option>
+        </select>
+    </div>
+
+    <div class="form-row">
+        <label for="node-input-profileToken">
+            <i class="fa fa-video-camera"></i> Profile
+        </label>
+        <select id="node-input-profileToken"></select>
+        <button id="refresh-profiles" type="button" style="margin-left:5px">
+            <i class="fa fa-refresh"></i>
+        </button>
+    </div>
+
+    <hr>
+
+    <div class="form-row">
+        <label for="node-input-name">
+            <i class="fa fa-tag"></i> Name
+        </label>
+        <input type="text" id="node-input-name">
+    </div>
+</script>
