@@ -33,18 +33,13 @@ module.exports = function (RED) {
                 return;
             }
 
-            if (!utils.hasService(node.deviceConfig.cam, 'events')) {
-                node.error('Events service not supported');
-                return;
-            }
+            // DO NOT pre-block events based on service detection
+            // Many cameras advertise Events inconsistently
 
             onvifCall(node, {
                 service: 'events',
                 method: 'getEventProperties',
-                msg: {
-                    ...msg,
-                    xaddr: node.deviceConfig.xaddress
-                }
+                msg
             });
         });
 
