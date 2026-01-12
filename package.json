@@ -1,22 +1,26 @@
 {
   "name": "node-red-contrib-onvif-ng",
-  "version": "1.0.0",
-  "description": "ONVIF nodes for Node-RED (modernized)",
+  "version": "0.9.0",
+  "description": "Modernized ONVIF nodes for Node-RED 4.x",
   "keywords": [
     "node-red",
     "onvif",
     "camera",
-    "ptz",
     "ip-camera"
   ],
   "license": "Apache-2.0",
   "author": "Panther Computers",
+  "homepage": "https://github.com/panthercomputers/node-red-contrib-onvif-ng",
+  "bugs": {
+    "url": "https://github.com/panthercomputers/node-red-contrib-onvif-ng/issues"
+  },
   "repository": {
     "type": "git",
     "url": "https://github.com/panthercomputers/node-red-contrib-onvif-ng.git"
   },
   "files": [
-    "nodes/**/*"
+    "nodes/**/*.js",
+    "nodes/**/*.html"
   ],
   "dependencies": {
     "onvif": "^0.6.4"
@@ -28,10 +32,9 @@
       "onvif-discovery": "nodes/onvif/onvif_discovery.js",
       "onvif-events": "nodes/onvif/onvif_events.js",
       "onvif-imaging": "nodes/onvif/onvif_imaging.js",
-      "onvif-media": "nodes/onvif/onvif_media.js",
       "onvif-media-profile": "nodes/onvif/onvif_media_profile.js",
       "onvif-media-stream": "nodes/onvif/onvif_media_stream.js",
-      "onvif-recordings": "nodes/onvif/onvif_recording.js"
+      "onvif-recording": "nodes/onvif/onvif_recording.js"
     }
   }
 }
