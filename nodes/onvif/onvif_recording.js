@@ -33,18 +33,13 @@ module.exports = function (RED) {
                 return;
             }
 
-            if (!utils.hasService(node.deviceConfig.cam, 'recording')) {
-                node.error('Recording service not supported');
-                return;
-            }
+            // DO NOT pre-block recording based on advertised services
+            // Many cameras expose recording metadata inconsistently
 
             onvifCall(node, {
                 service: 'recording',
                 method: 'getRecording',
-                msg: {
-                    ...msg,
-                    xaddr: node.deviceConfig.xaddress
-                }
+                msg
             });
         });
 
