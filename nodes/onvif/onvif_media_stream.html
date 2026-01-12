@@ -55,7 +55,6 @@ RED.nodes.registerType('onvif-media-stream',{
             <option value="">— via msg.action —</option>
             <option value="getStreamUri">Get stream URI</option>
             <option value="getSnapshotUri">Get snapshot URI</option>
-            <option value="getSnapshot">Get snapshot (image)</option>
             <option value="reconnect">Reconnect</option>
         </select>
     </div>
@@ -92,15 +91,87 @@ RED.nodes.registerType('onvif-media-stream',{
 
 <script type="text/x-red" data-help-name="onvif-media-stream">
 <p>
-<strong>ONVIF Media Stream</strong>
+<strong>ONVIF Media Stream — Media URI Retrieval</strong>
 </p>
+<p>
+<strong>Purpose</strong>
+</p><p>
+This node retrieves streaming or snapshot URIs for a selected media profile.
+</p><p>
+What it does
+</p><p>
+<ul><li>
+Get Stream URI
+</li><li>
+Get Snapshot URI
+</li><li>
+Reconnect device
+</li></ul>
+</p><p>
+What it does NOT do
+</p><p>
+<ul><li>
+It does not open streams
+</li><li>
+It does not proxy video
+</li></ul>
+</p><p>
+Profile requirement
+</p><p>
+A valid ProfileToken is required for all stream actions.
+</p><p>
+Status meanings
+</p><p>
+<ul><li>
+connected – Media service available
+</li><li>
+unsupported – Media streaming not advertised
+</li><li>
+disconnected – Camera unreachable
+</li></ul>
+</p>
+<hr>
+<strong><center>Snapshots note:</center></strong>
+</p>
+<p>
+This node follows the ONVIF specification and returns a snapshot URI only.
+It does not download the image itself.
+</p><p>
+Most ONVIF cameras:
+</p><p>
+<ul>
+    <li>Return internal IP addresses</li>
+    <li>Always use port 80 or 443</li>
+    <li>Are unaware of NAT or port forwarding</li>
+</ul>
+</p><p>
+Because of this, additional flow logic is required.
+</p>
+
+<p>
+To retrieve the actual image:
+</p>
+
+<ol>
+  <li>Use <b>Get snapshot URI</b></li>
+<li> Use a change node to change msg.payload.uri to msg.payload.url<br>
+     or use a function node to craft the msg.payload.url needed by the HTTP Request node</li>
+  <li>Connect to a <b>HTTP Request</b> node</li>
+  <li>Enable <b>Digest Authentication</b></li>
+  <li>Set <code>Return</code> to <b>a binary buffer</b></li>
+</ol>
+
+<p>
+This separation ensures compatibility with all ONVIF cameras and avoids
+authentication and transport issues.
+</p>
+<p><strong> This Node: </strong> </p>
 <p>
 Retrieves stream and snapshot information from an ONVIF camera.
 </p>
 <ul>
 <li><b>Get stream URI</b> — returns RTSP/HTTP stream URL</li>
 <li><b>Get snapshot URI</b> — returns snapshot endpoint</li>
-<li><b>Get snapshot</b> — downloads snapshot image</li>
 </ul>
 <p>
 If no action is selected, <code>msg.action</code> must be provided.
