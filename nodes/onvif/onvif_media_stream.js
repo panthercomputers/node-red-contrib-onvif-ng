@@ -1,5 +1,5 @@
 /**
- * Copyright 2025 Panther Computers
+ * Copyright 2025–2026 Panther Computers
  *
  * Licensed under the Apache License, Version 2.0
  */
@@ -12,24 +12,27 @@ module.exports = function (RED) {
 
     function OnvifMediaStreamNode(config) {
         RED.nodes.createNode(this, config);
-
-        this.deviceConfig = RED.nodes.getNode(config.deviceConfig);
-        this.action = config.action;
-        this.profileName = config.profileName;
-        this.protocol = config.protocol;
-        this.stream = config.stream;
-
         const node = this;
 
-        if (this.deviceConfig) {
-            this.deviceConfig.initialize();
+        /* --------------------------------------------------
+         * Configuration
+         * -------------------------------------------------- */
+        node.deviceConfig = RED.nodes.getNode(config.deviceConfig);
+        node.action       = config.action;
+        node.profileName  = config.profileName;
+        node.profileToken = config.profileToken;
+        node.protocol     = config.protocol;
+        node.stream       = config.stream;
+
+        if (node.deviceConfig) {
+            node.deviceConfig.initialize();
         }
 
         node.on('input', function (msg) {
             const action = msg.action || node.action;
 
             if (!action) {
-                node.error('No action specified', msg);
+                node.error('No media action specified', msg);
                 return;
             }
 
@@ -38,6 +41,9 @@ module.exports = function (RED) {
                 return;
             }
 
+            /* --------------------------------------------------
+             * RECONNECT (device-level)
+             * -------------------------------------------------- */
             if (action === 'reconnect') {
                 node.deviceConfig.initialize();
                 msg.payload = { status: 'reconnecting' };
@@ -45,22 +51,47 @@ module.exports = function (RED) {
                 return;
             }
 
-            let profileToken = msg.profileToken;
-
-            if (!profileToken && node.profileName) {
-                profileToken = node.deviceConfig.getProfileTokenByName(
-                    node.profileName
-                );
+            if (!node.deviceConfig.cam) {
+                node.error('Device not connected', msg);
+                return;
             }
 
-            const params = Object.assign({}, msg, {
-                ProfileToken: profileToken,
-                Protocol: node.protocol,
-                Stream: node.stream
-            });
+            /* --------------------------------------------------
+             * Resolve ProfileToken (single source of truth)
+             * -------------------------------------------------- */
+            let profileToken =
+                msg.profileToken ||      // Node-RED convention
+                msg.ProfileToken ||      // ONVIF convention
+                node.profileToken;       // Node config
+
+            if (!profileToken && node.profileName) {
+                profileToken =
+                    node.deviceConfig.getProfileTokenByName(node.profileName);
+            }
+
+            if (!profileToken) {
+                node.error(
+                    `ProfileToken is required for media action: ${action}`,
+                    msg
+                );
+                return;
+            }
+
+            /* --------------------------------------------------
+             * Media call
+             * NOTE: media methods live directly on cam
+             * -------------------------------------------------- */
+            const params = { ProfileToken: profileToken };
+
+            if (node.protocol) {
+                params.Protocol = node.protocol;
+            }
+
+            if (node.stream) {
+                params.Stream = node.stream;
+            }
 
             onvifCall(node, {
-                service: 'media',
                 method: action,
                 params,
                 msg
