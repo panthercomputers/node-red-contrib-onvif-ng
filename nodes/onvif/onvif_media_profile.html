@@ -58,7 +58,8 @@ RED.nodes.registerType('onvif-media-profile',{
     </div>
 
     <div class="form-row actionParam-row" id="profileToken-row">
-        <label>Profile token</label>
+        <label>Source Profile (clone from)
+</label>
         <input type="text" id="node-input-profileToken">
     </div>
 
@@ -77,12 +78,75 @@ RED.nodes.registerType('onvif-media-profile',{
 
 <script type="text/x-red" data-help-name="onvif-media-profile">
 <p>
-<strong>ONVIF Media Profile</strong>
+<strong>ONVIF Media Profile — Media Profile Management</strong>
+</p><p>
+<strong>Purpose</strong>
+</p><p>
+This node manages ONVIF Media Profiles.
+</p><p>
+Depending on the selected action, it can:
+<ul><li>
+List profiles
+</li><li>
+Create profiles
+</li><li>
+Delete profiles
+</li><li>
+Retrieve profile details
+</li></ul>
+Profile selection
+<ul><li>
+Profiles are identified internally by ProfileToken
+</li><li>
+The UI allows selecting from cached profiles
+</li><li>
+Tokens are resolved automatically when a profile name is selected
+</li></ul>
+</p><p>
+Status meanings
+</p><p>
+<ul><li>
+connected – Media service available
+</li><li>
+unsupported – Media service not advertised
+</li><li>
+disconnected – Camera unreachable
+</li></ul>
+</p><p>
+Tip
+Use Get Profiles first to discover available profiles.
+</p><hr><p>
+<strong>Profiles</strong>
+</p><p>
+ONVIF profiles are discovered and cached when the device connects.
+</p><p>
+To view available profiles:
+</p><p>
+Use an onvif-media-profile node with action Get Profiles
+</p><p>
+Inspect the output to see profile names and tokens
+</p><p>
+<strong>Create Profile </strong>
+</p><p>
+For actions like Create Profile or Delete Profile:
+</p><p>
+Provide either:
+</p><p>
+profileName (recommended), or profileToken
+</p><p>
+ONVIF profiles are created by cloning an existing profile.
+</p><p>
+You must select an existing profile (via Profile Name), or provide a ProfileToken
+</p><p>
+The new profile will inherit settings from the selected profile.
 </p>
 <p>
-Manages media profiles on an ONVIF device.
-</p>
+<strong>Delete Profile</strong>
 <p>
+Deletes the selected profile.
+</p><p>
+The profile can be selected by name or token.
+</p><p>
 <strong>Warning:</strong> Creating or deleting profiles can affect existing
 streams. Use with care.
 </p>
