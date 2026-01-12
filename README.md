@@ -1,4 +1,6 @@
 # node-red-contrib-onvif-ng
+[![npm version](https://img.shields.io/npm/v/node-red-contrib-onvif-ng.svg)](https://www.npmjs.com/package/node-red-contrib-onvif-ng)
+[![npm downloads](https://img.shields.io/npm/dm/node-red-contrib-onvif-ng.svg)](https://www.npmjs.com/package/node-red-contrib-onvif-ng)
 
 Modernized ONVIF nodes for Node-RED 4.x using the agsh/onvif library (ONVIF 4.7 compatible).
 
