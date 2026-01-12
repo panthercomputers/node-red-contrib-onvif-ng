@@ -5,6 +5,11 @@ Modernized ONVIF nodes for Node-RED 4.x using the agsh/onvif library (ONVIF 4.7 
 This project is a **maintained continuation** of  
 **node-red-contrib-onvif-nodes** by Bart Butenaers, updated for modern Node-RED runtimes and real-world camera behavior.
 
+## Legacy branch
+
+The `bart-original` branch preserves the original upstream implementation by Bart Butenaers.
+It is retained for historical reference and is not merged into `main`.
+
 ---
 
 ## ✨ Key Features
