@@ -2,8 +2,8 @@
  * Original work:
  * Copyright 2018 Bart Butenaers
  *
- * Modifications:
- * Copyright 2025 Panther Computers
+ * Modernization & fixes:
+ * Copyright 2025–2026 Panther Computers
  *
  * Licensed under the Apache License, Version 2.0
  */
@@ -33,24 +33,39 @@ module.exports = function (RED) {
                 node.status({ fill: "red", shape: "ring", text: "disconnected" });
                 break;
             case STATUS.UNCONFIGURED:
-                node.status({ fill: "grey", shape: "ring", text: "credentials missing" });
+                node.status({ fill: "grey", shape: "ring", text: "not configured" });
                 break;
             default:
                 node.status({});
         }
     }
 
+    function normalizeProfiles(cam) {
+        if (!cam || !Array.isArray(cam.profiles)) return [];
+
+        return cam.profiles.map(p => ({
+            name: p.name,
+            token: p.$?.token || p.token || null,
+            raw: p
+        })).filter(p => p.token);
+    }
+
     function OnVifConfigNode(config) {
         RED.nodes.createNode(this, config);
         const node = this;
 
-        this.xaddress = config.xaddress;
-        this.port = Number(config.port || 80);
-        this.name = config.name;
-        this.timeout = Number(config.timeout || 3);
-        this.checkConnectionInterval = Number(config.checkConnectionInterval || 5);
+        /* ------------------------------------------------------------
+         * Configuration
+         * ---------------------------------------------------------- */
+        node.xaddress = config.xaddress;
+        node.port = Number(config.port || 80);
+        node.name = config.name;
+        node.timeout = Number(config.timeout || 3);
+        node.checkConnectionInterval = Number(config.checkConnectionInterval || 5);
 
         node.cam = null;
+        node.profileCache = null;
+
         node._initializing = false;
         node._checking = false;
         node.checkConnectionTimer = null;
@@ -58,9 +73,27 @@ module.exports = function (RED) {
         node.setMaxListeners(50);
 
         /* ------------------------------------------------------------
-         * Initialization / connection
+         * Profile helpers (RUNTIME CONTRACT)
          * ---------------------------------------------------------- */
-        this.initialize = function () {
+
+        node.getProfiles = function () {
+            return node.profileCache || [];
+        };
+
+        node.getProfileTokenByName = function (profileName) {
+            if (!profileName || !node.profileCache) return null;
+            for (const p of node.profileCache) {
+                if (p.name === profileName) {
+                    return p.token;
+                }
+            }
+            return null;
+        };
+
+        /* ------------------------------------------------------------
+         * Initialization / connection (RUNTIME ONLY)
+         * ---------------------------------------------------------- */
+        node.initialize = function () {
             if (node.cam || node._initializing) return;
 
             if (!node.xaddress) {
@@ -70,16 +103,8 @@ module.exports = function (RED) {
             }
 
             const creds = node.credentials || {};
-
-            // 🔐 Credential validation (PORTABLE AUTH)
-            let username = creds.user;
-            let password = creds.password;
-
-            // Optional environment variable fallback
-            if (!username && process.env.ONVIF_USER) {
-                username = process.env.ONVIF_USER;
-                password = process.env.ONVIF_PASS;
-            }
+            const username = creds.user;
+            const password = creds.password;
 
             if (!username || !password) {
                 setOnvifStatus(node, STATUS.UNCONFIGURED);
@@ -98,20 +123,32 @@ module.exports = function (RED) {
                 timeout: node.timeout * 1000
             };
 
-            node.cam = new onvif.Cam(options, (err) => {
+            node.cam = new onvif.Cam(options, err => {
                 node._initializing = false;
 
                 if (err) {
+                    node.cam = null;
+                    node.profileCache = null;
                     node.error(err);
                     setOnvifStatus(node, STATUS.DISCONNECTED);
-                } else {
-                    setOnvifStatus(node, STATUS.CONNECTED);
+                    return;
                 }
+
+                try {
+                    node.profileCache = normalizeProfiles(node.cam);
+                } catch (e) {
+                    node.profileCache = [];
+                    node.error(e);
+                }
+
+                setOnvifStatus(node, STATUS.CONNECTED);
             });
 
+            /* ------------------------------------------------------------
+             * Connection watchdog
+             * ---------------------------------------------------------- */
             if (node.checkConnectionTimer) {
                 clearInterval(node.checkConnectionTimer);
-                node.checkConnectionTimer = null;
             }
 
             if (node.checkConnectionInterval > 0) {
@@ -120,12 +157,16 @@ module.exports = function (RED) {
 
                     node._checking = true;
 
-                    node.cam.getSystemDateAndTime((err) => {
+                    node.cam.getSystemDateAndTime(err => {
                         node._checking = false;
 
                         if (err) {
                             setOnvifStatus(node, STATUS.DISCONNECTED);
                             return;
+                        }
+
+                        if (!node.cam.capabilities && node.cam.connect) {
+                            node.cam.connect(() => {});
                         }
 
                         setOnvifStatus(node, STATUS.CONNECTED);
@@ -139,18 +180,69 @@ module.exports = function (RED) {
          * ---------------------------------------------------------- */
         node.on("close", function () {
             setOnvifStatus(node, "");
-
             if (node.checkConnectionTimer) {
                 clearInterval(node.checkConnectionTimer);
-                node.checkConnectionTimer = null;
             }
-
             node.cam = null;
-            node._checking = false;
-            node._initializing = false;
+            node.profileCache = null;
             node.removeAllListeners("onvif_status");
         });
     }
+
+    /* ------------------------------------------------------------
+     * Admin endpoint: PROFILES (EDITOR CONTRACT)
+     * ---------------------------------------------------------- */
+    RED.httpAdmin.get("/onvifdevice/profiles/:id", function (req, res) {
+        const configNode = RED.nodes.getNode(req.params.id);
+
+        /* --------------------------------------------------------
+         * 1️⃣ If runtime cache exists → return it
+         * ------------------------------------------------------ */
+        if (configNode && configNode.profileCache) {
+            return res.json(
+                configNode.profileCache.map(p => ({
+                    label: p.name,
+                    value: p.token
+                }))
+            );
+        }
+
+        /* --------------------------------------------------------
+         * 2️⃣ Dirty editor config → temp Cam (NO SIDE EFFECTS)
+         * ------------------------------------------------------ */
+        try {
+            const hostname = req.query.hostname || req.query.xaddress;
+            const port = Number(req.query.port || 80);
+            const username = req.query.user;
+            const password = req.query.password;
+
+            if (!hostname || !username || !password) {
+                return res.json([]);
+            }
+
+            const cam = new onvif.Cam({
+                hostname,
+                port,
+                username,
+                password,
+                timeout: 5000
+            }, err => {
+                if (err || !cam.profiles) {
+                    return res.json([]);
+                }
+
+                const profiles = normalizeProfiles(cam);
+                res.json(
+                    profiles.map(p => ({
+                        label: p.name,
+                        value: p.token
+                    }))
+                );
+            });
+        } catch (e) {
+            res.json([]);
+        }
+    });
 
     RED.nodes.registerType("onvif-config", OnVifConfigNode, {
         credentials: {
