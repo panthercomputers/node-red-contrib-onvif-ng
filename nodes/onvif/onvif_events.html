@@ -23,7 +23,7 @@ RED.nodes.registerType('onvif-events', {
     icon: "font-awesome/fa-bell",
 
     label: function () {
-        return this.name || "ONVIF Events";
+        return this.name || "ONVIF Events (Discovery)";
     },
 
     oneditprepare: function () {
@@ -65,25 +65,92 @@ RED.nodes.registerType('onvif-events', {
 </script>
 
 <script type="text/x-red" data-help-name="onvif-events">
+    <h3>ONVIF Events — Event Capability Discovery</h3>
+
     <p>
-        <strong>ONVIF Events</strong>
-    </p>
+ <strong>Purpose</strong>
+</p><p>
+This node performs ONVIF Event capability discovery.
+</p><p>
+It queries the camera for supported event topics, rules, and filters.
+It does not subscribe to live events and does not emit event notifications.
+</p><p>
+Status meanings
+</p><p>
+<ul><li>
+ready (discovery) – The camera is connected and event capabilities can be queried
+</li><li>
+unsupported – The camera explicitly does not advertise Events
+</li><li>
+disconnected – The camera is not reachable
+</li></ul>
+</p><p>
+Output
+</p><p>
+<ul><li>
+msg.payload contains the result of GetEventProperties
+</li></ul>
+</p><p>
+Typical use
+</p><p>
+<ul><li>
+Determine whether a camera supports motion, analytics, or other events
+</li><li>
+Inspect available event topics before implementing subscriptions elsewhere
+</li></ul>
+</p><p>
+Notes
+<ul><li>
+Many cameras (including Hanwha) support Events even if they advertise them inconsistently
+</li><li>
+This node does not block based on advertised capabilities
+</li></ul>
+</p>
+    <hr>
+
+    <h4>⚠️ Important: What this node does NOT do</h4>
+
     <p>
-        Subscribes to and manages ONVIF event services on compatible IP cameras.
-      <ul>
-        <li>Events are asynchronous</li>
-        <li>Node emits messages per event </li>
-        <li>Long-running subscriptions may reconnect automatically</li>
-      </ul>
+        This node <b>does not receive live events</b> such as:
     </p>
+
     <ul>
-        <li><b>Start listening</b> — opens an event subscription</li>
-        <li><b>Stop listening</b> — closes the subscription</li>
-        <li><b>Get event properties</b> — retrieves supported event topics</li>
-        <li><b>Get service capabilities</b> — retrieves event service capabilities</li>
+        <li>Motion detection</li>
+        <li>Analytics alarms</li>
+        <li>Recording start/stop</li>
+        <li>Digital input triggers</li>
     </ul>
+
     <p>
-        The action may also be supplied dynamically via
-        <code>msg.action</code>.
+        ONVIF live events require a <b>subscription</b> (PullPoint or WS-Notification),
+        which is <b>not implemented</b> in this version of the node.
+    </p>
+
+    <hr>
+
+    <h4>Status Indicators</h4>
+
+    <ul>
+        <li><b>connected</b> – Camera is connected and Events service is reachable</li>
+        <li><b>unsupported</b> – Camera does not advertise ONVIF Events</li>
+        <li><b>disconnected</b> – Camera is unreachable</li>
+    </ul>
+
+    <hr>
+
+    <h4>Recommended Next Steps</h4>
+
+    <ul>
+        <li>Use this node to <b>inspect camera event capabilities</b></li>
+        <li>Verify supported topics before implementing analytics</li>
+        <li>For live events, use camera-specific APIs or MQTT/webhooks</li>
+        <li>Future versions may add ONVIF PullPoint subscriptions</li>
+    </ul>
+
+    <hr>
+
+    <p>
+        This node is intended for <b>capability discovery and validation</b>,
+        not real-time event streaming.
     </p>
 </script>
