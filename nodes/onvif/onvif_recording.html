@@ -23,8 +23,9 @@ RED.nodes.registerType('onvif-recording', {
     icon: "font-awesome/fa-circle-o",
 
     label: function () {
-        return this.name || "ONVIF Recording";
+    return this.name || "ONVIF Recording (Capability Discovery)";
     }
+
 });
 </script>
 
@@ -61,20 +62,88 @@ RED.nodes.registerType('onvif-recording', {
 </script>
 
 <script type="text/x-red" data-help-name="onvif-recording">
+    <h3>ONVIF Recording — Media Profile Management</h3>
+
     <p>
-        <strong>ONVIF Recording</strong>
-    </p>
+ <strong> Purpose</strong>
+</p><p>
+This node performs ONVIF Recording capability discovery.
+</p><p>
+It queries the camera for recording services and metadata.
+It does not start, stop, or manage recordings.
+</p><p>
+Status meanings
+</p><p>
+<ul><li>
+ready (discovery) – Recording services can be queried
+</li><li>
+unsupported – The camera does not advertise Recording services
+</li><li>
+disconnected – The camera is not reachable
+</li></ul>
+</p><p>
+Output
+</p><p>
+<ul><li>
+msg.payload contains recording information returned by the device
+</li></ul>
+</p><p>
+Typical use
+<ul><li>
+Verify whether a camera supports ONVIF recording
+</li></ul>
+Inspect recording configuration before using external NVR systems
+</p>
+    <hr>
+
+    <h4>⚠️ Important: What this node does NOT do</h4>
+
     <p>
-        Provides access to the ONVIF Recording service for compatible devices.
+        This node <b>does not</b>:
     </p>
+
     <ul>
-        <li><b>Get recording</b> — list available recording</li>
-        <li><b>Get recording configuration</b> — retrieve configuration details</li>
-        <li><b>Get recording options</b> — retrieve supported recording options</li>
-        <li><b>Get service capabilities</b> — retrieve recording service capabilities</li>
+        <li>Start or stop recordings</li>
+        <li>Control camera storage</li>
+        <li>Download recorded video</li>
+        <li>Provide playback timelines</li>
     </ul>
+
     <p>
-        If no action is selected, the action may be supplied dynamically via
-        <code>msg.action</code>.
+        ONVIF recording control typically requires:
+    </p>
+
+    <ul>
+        <li>A dedicated NVR or VMS</li>
+        <li>Vendor-specific APIs</li>
+        <li>Advanced ONVIF Recording + Replay profiles</li>
+    </ul>
+
+    <hr>
+
+    <h4>Status Indicators</h4>
+
+    <ul>
+        <li><b>connected</b> – Recording service detected and reachable</li>
+        <li><b>unsupported</b> – Device does not advertise recording support</li>
+        <li><b>disconnected</b> – Device is unreachable</li>
+    </ul>
+
+    <hr>
+
+    <h4>Recommended Next Steps</h4>
+
+    <ul>
+        <li>Use this node to verify recording capability before integration</li>
+        <li>Confirm whether recording is camera-based or NVR-based</li>
+        <li>Use vendor SDKs or ONVIF Replay for actual playback</li>
+        <li>Use Events or Analytics to trigger external recording workflows</li>
+    </ul>
+
+    <hr>
+
+    <p>
+        This node is intended for <b>recording capability discovery</b> and validation,
+        not full recording management.
     </p>
 </script>
