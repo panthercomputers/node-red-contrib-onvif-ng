@@ -81,6 +81,33 @@ RED.nodes.registerType('onvif-config', {
 </script>
 
 <script type="text/x-red" data-help-name="onvif-config">
+<H3>onvif-config — Device Configuration</H3>
+<p></p>
+<strong>Purpose</strong>
+<p></p>
+Defines a reusable ONVIF device connection.
+<p></p>
+Responsibilities
+<p></p>
+<ul><li>
+Maintains device connection
+</li><li>
+Caches media profiles
+</li><li>
+Emits connection status to dependent nodes
+</li></ul>
+<p></p>
+Profile cache
+<p></p>
+<ul><li>
+Profiles are cached at runtime
+</li><li>
+Editor dropdowns use cached or temporary discovery data
+</li><li>
+Tokens are resolved automatically by dependent nodes
+</li></ul>
+</p>
+<hr>
     <p>
         Defines a reusable ONVIF camera connection.
         Credentials are stored securely and are not exported with flows.
