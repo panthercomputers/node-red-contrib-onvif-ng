@@ -129,3 +129,13 @@ Please:
 Active maintenance  
 PTZ deferred  
 Stability prioritized
+
+## Maintainer
+
+Maintained by **Panther Computers**.
+
+The maintainer is also an employee of  
+[Mobile Surveillance Solutions](https://www.mobilesurvsolutions.com),  
+where ONVIF-based systems are used in production environments.
+
+
