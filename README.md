@@ -9,7 +9,7 @@ This project is a **maintained continuation** of
 
 The `bart-original` branch preserves the original upstream implementation by Bart Butenaers.
 It is retained for historical reference and is not merged into `main`.
-
+Archived screenshots and legacy documentation are preserved for reference but are not part of the current API contract.
 ---
 
 ## ✨ Key Features
