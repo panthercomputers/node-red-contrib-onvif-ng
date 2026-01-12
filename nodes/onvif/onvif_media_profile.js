@@ -1,8 +1,8 @@
-<!--
-  Copyright 2025 Panther Computers
-
-  Licensed under the Apache License, Version 2.0
--->
+/**
+ * Copyright 2025–2026 Panther Computers
+ *
+ * Licensed under the Apache License, Version 2.0
+ */
 
 'use strict';
 
@@ -12,36 +12,47 @@ module.exports = function (RED) {
 
     function OnvifMediaProfileNode(config) {
         RED.nodes.createNode(this, config);
-
-        this.deviceConfig = RED.nodes.getNode(config.deviceConfig);
-        this.action = config.action;
-        this.profileName = config.profileName;
-        this.profileToken = config.profileToken;
-
         const node = this;
 
-        if (this.deviceConfig) {
-            this.deviceConfig.initialize();
+        /* --------------------------------------------------
+         * Configuration
+         * -------------------------------------------------- */
+        node.deviceConfig = RED.nodes.getNode(config.deviceConfig);
+        node.action       = config.action;
+        node.profileName  = config.profileName;
+        node.profileToken = config.profileToken;
+
+        if (node.deviceConfig) {
+            node.deviceConfig.initialize();
         }
 
         node.on('input', function (msg) {
             const action = msg.action || node.action;
 
             if (!action) {
-                node.error('No action specified', msg);
+                node.error('No media profile action specified', msg);
                 return;
             }
 
-            if (!node.deviceConfig) {
-                node.error('No device configuration', msg);
+            if (!node.deviceConfig || !node.deviceConfig.cam) {
+                node.error('Device not connected', msg);
                 return;
             }
 
-            let params = {};
+            /* --------------------------------------------------
+             * Actions that do NOT require a ProfileToken
+             * -------------------------------------------------- */
+            const noProfileRequired = new Set([
+                'getProfiles'
+            ]);
 
-            // Resolve profile token only when required
-            if (action !== 'getProfiles') {
-                let profileToken = msg.profileToken || node.profileToken;
+            const params = {};
+
+            if (!noProfileRequired.has(action)) {
+                let profileToken =
+                    msg.profileToken ||      // Node-RED convention
+                    msg.ProfileToken ||      // ONVIF convention
+                    node.profileToken;       // Node config
 
                 if (!profileToken && node.profileName) {
                     profileToken =
@@ -49,15 +60,21 @@ module.exports = function (RED) {
                 }
 
                 if (!profileToken) {
-                    node.error('No profile token resolved', msg);
+                    node.error(
+                        `ProfileToken is required for media profile action: ${action}`,
+                        msg
+                    );
                     return;
                 }
 
                 params.ProfileToken = profileToken;
             }
 
+            /* --------------------------------------------------
+             * Media Profile call
+             * NOTE: profile methods live directly on cam
+             * -------------------------------------------------- */
             onvifCall(node, {
-                service: null,              // media methods are on cam directly
                 method: action,
                 params,
                 msg
