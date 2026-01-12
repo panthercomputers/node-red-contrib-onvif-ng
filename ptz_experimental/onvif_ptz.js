@@ -1,12 +1,8 @@
 /**
- * Original work:
- * Copyright 2018 Bart Butenaers
- *
- * Modifications:
- * Copyright 2025 Panther Computers
- *
+ * Copyright 2026 Panther Computers
  * Licensed under the Apache License, Version 2.0
  */
+
 'use strict';
 
 const onvifCall = require('./onvifCall');
